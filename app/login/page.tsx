@@ -6,10 +6,8 @@ export default function LoginPage() {
   const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!;
   const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!;
   const redirectUri = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI!;
-  const region = process.env.NEXT_PUBLIC_COGNITO_REGION!; // not used yet, but keeps config consistent
 
   const loginUrl = useMemo(() => {
-    // Cognito Hosted UI (Authorization Code Flow)
     const url = new URL(`${domain}/login`);
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('response_type', 'code');
@@ -35,10 +33,6 @@ export default function LoginPage() {
       >
         Sign in (Email + Password)
       </a>
-
-      <p style={{ marginTop: 18, fontSize: 12, opacity: 0.7 }}>
-        Region: {region}
-      </p>
     </main>
   );
 }
