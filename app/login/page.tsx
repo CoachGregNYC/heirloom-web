@@ -1,57 +1,77 @@
-// app/login/page.tsx
-"use client";
+'use client';
 
-import React from "react";
-
-function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing required env var: ${name}`);
-  return v;
-}
+import React, { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
-  // These MUST be set in Amplify Hosting env vars
-  const cognitoDomain = requireEnv("NEXT_PUBLIC_COGNITO_DOMAIN"); // e.g. https://us-east-1_XXXX.auth.us-east-1.amazoncognito.com
-  const clientId = requireEnv("NEXT_PUBLIC_COGNITO_CLIENT_ID");
-  const redirectUri = requireEnv("NEXT_PUBLIC_COGNITO_REDIRECT_URI"); // https://<your-amplify-domain>/auth/callback
+  const router = useRouter();
 
-  const scope = "openid email profile";
-  const responseType = "code";
+  const cfg = useMemo(() => {
+    const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN;
+    const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
+    const redirectUri = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI;
 
-  // IMPORTANT: Use /oauth2/authorize (this is the canonical Hosted UI entrypoint)
-  const authorizeUrl =
-    `${cognitoDomain.replace(/\/$/, "")}/oauth2/authorize` +
-    `?client_id=${encodeURIComponent(clientId)}` +
-    `&response_type=${encodeURIComponent(responseType)}` +
-    `&scope=${encodeURIComponent(scope)}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    return { domain, clientId, redirectUri };
+  }, []);
+
+  const onSignIn = () => {
+    const { domain, clientId, redirectUri } = cfg;
+
+    if (!domain || !clientId || !redirectUri) {
+      alert('Missing env vars for Cognito login. Check Amplify Hosting env vars.');
+      return;
+    }
+
+    // Build Hosted UI /login URL
+    const url =
+      `${domain.replace(/\/$/, '')}/login` +
+      `?client_id=${encodeURIComponent(clientId)}` +
+      `&response_type=code` +
+      `&scope=${encodeURIComponent('openid email profile')}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+    window.location.href = url;
+  };
+
+  const onGoHome = () => {
+    router.push('/');
+  };
 
   return (
-    <main style={{ padding: 32, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial" }}>
-      <h1 style={{ margin: 0 }}>Heirloom</h1>
-      <p style={{ marginTop: 8 }}>Preserve what matters. Private, secure, family-first.</p>
+    <main style={{ padding: 32, fontFamily: 'system-ui' }}>
+      <h1 style={{ marginBottom: 6 }}>Heirloom</h1>
+      <p style={{ marginTop: 0, color: '#444' }}>Preserve what matters. Private, secure, family-first.</p>
 
       <div style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 18, marginBottom: 12 }}>Sign in</h2>
 
-        <a
-          href={authorizeUrl}
+        <button
+          onClick={onSignIn}
           style={{
-            display: "inline-block",
-            padding: "10px 14px",
-            borderRadius: 8,
-            border: "1px solid #111",
-            textDecoration: "none",
-            color: "#111",
-            fontWeight: 600,
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: '1px solid #111',
+            background: '#111',
+            color: '#fff',
+            cursor: 'pointer',
           }}
         >
           Sign in
-        </a>
+        </button>
 
-        <p style={{ marginTop: 16, fontSize: 12, opacity: 0.7 }}>
-          (Debug) Redirect URI: <code>{redirectUri}</code>
-        </p>
+        <button
+          onClick={onGoHome}
+          style={{
+            marginLeft: 10,
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: '1px solid #ccc',
+            background: '#fff',
+            cursor: 'pointer',
+          }}
+        >
+          Back
+        </button>
       </div>
     </main>
   );
