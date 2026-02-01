@@ -1,41 +1,25 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 
-export default function AuthCallback() {
-  const [code, setCode] = useState<string | null>(null);
+export default function AuthCallbackPage() {
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const authCode = params.get("code");
-    setCode(authCode);
-  }, []);
+    const code = searchParams.get('code');
+    if (!code) return;
+
+    // Call our server-side API route
+    fetch(`/api/auth/callback?code=${code}`).then(() => {
+      window.location.href = '/';
+    });
+  }, [searchParams]);
 
   return (
     <main style={{ padding: 32 }}>
-      <h1>Signing you in…</h1>
-
-      {code ? (
-        <>
-          <p>Authorization code received:</p>
-          <pre
-            style={{
-              marginTop: 12,
-              padding: 12,
-              background: "#f4f4f4",
-              overflowX: "auto",
-            }}
-          >
-            {code}
-          </pre>
-
-          <p style={{ marginTop: 16 }}>
-            ✅ Cognito login succeeded.
-          </p>
-        </>
-      ) : (
-        <p>Waiting for authorization code…</p>
-      )}
+      <h2>Signing you in…</h2>
+      <p>Completing secure authentication.</p>
     </main>
   );
 }
