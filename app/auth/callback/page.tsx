@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 function CallbackInner() {
@@ -10,35 +10,45 @@ function CallbackInner() {
   const [status, setStatus] = useState<'working' | 'error' | 'done'>('working');
   const [message, setMessage] = useState<string>('Signing you in…');
 
-  const code = searchParams.get('code');
-  const error = searchParams.get('error');
-  const errorDescription = searchParams.get('error_description');
-
-  const cfg = useMemo(() => {
-    const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN;
-    const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
-    const redirectUri = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI;
-
-    return { domain, clientId, redirectUri };
-  }, []);
+  const hasRunRef = useRef(false);
 
   useEffect(() => {
+    // Prevent double-run in dev / strict-mode quirks
+    if (hasRunRef.current) return;
+    hasRunRef.current = true;
+
     async function run() {
-      // If Cognito returned an error
+      // If already signed in, go straight to /app
+      const existingAccess = localStorage.getItem('heirloom_access_token');
+      const existingId = localStorage.getItem('heirloom_id_token');
+      if (existingAccess && existingId) {
+        setStatus('done');
+        setMessage('Already signed in. Redirecting…');
+        router.replace('/app');
+        return;
+      }
+
+      const code = searchParams.get('code');
+      const error = searchParams.get('error');
+      const errorDescription = searchParams.get('error_description');
+
+      // Cognito returned an error
       if (error) {
         setStatus('error');
         setMessage(`${error}: ${errorDescription ?? 'Unknown error'}`);
         return;
       }
 
-      // If no code was provided
+      // No code provided
       if (!code) {
         setStatus('error');
         setMessage('missing_code');
         return;
       }
 
-      const { domain, clientId, redirectUri } = cfg;
+      const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN;
+      const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
+      const redirectUri = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI;
 
       if (!domain || !clientId || !redirectUri) {
         setStatus('error');
@@ -58,9 +68,7 @@ function CallbackInner() {
 
         const res = await fetch(tokenUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: body.toString(),
         });
 
@@ -93,8 +101,6 @@ function CallbackInner() {
 
         setStatus('done');
         setMessage('Signed in. Redirecting…');
-
-        // Redirect to a "logged in" area
         router.replace('/app');
       } catch (e: any) {
         setStatus('error');
@@ -103,7 +109,7 @@ function CallbackInner() {
     }
 
     run();
-  }, [code, error, errorDescription, cfg, router]);
+  }, [router, searchParams]);
 
   return (
     <main style={{ padding: 32, fontFamily: 'system-ui' }}>
@@ -124,7 +130,7 @@ function CallbackInner() {
 }
 
 export default function CallbackPage() {
-  // Critical: useSearchParams must be inside Suspense for static export / prerender
+  // useSearchParams must be inside Suspense for prerender/static export compatibility
   return (
     <Suspense fallback={<main style={{ padding: 32 }}>Loading…</main>}>
       <CallbackInner />
