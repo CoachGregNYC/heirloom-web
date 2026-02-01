@@ -1,25 +1,29 @@
-'use client';
+// app/auth/callback/page.tsx
+import { redirect } from "next/navigation";
 
-import { useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+type Props = {
+  searchParams?: Record<string, string | string[] | undefined>;
+};
 
-export default function AuthCallbackPage() {
-  const searchParams = useSearchParams();
+function getParam(searchParams: Props["searchParams"], key: string): string | null {
+  const v = searchParams?.[key];
+  if (!v) return null;
+  if (Array.isArray(v)) return v[0] ?? null;
+  return v;
+}
 
-  useEffect(() => {
-    const code = searchParams.get('code');
-    if (!code) return;
+export default function AuthCallbackPage({ searchParams }: Props) {
+  const code = getParam(searchParams, "code");
+  const state = getParam(searchParams, "state");
 
-    // Call our server-side API route
-    fetch(`/api/auth/callback?code=${code}`).then(() => {
-      window.location.href = '/';
-    });
-  }, [searchParams]);
+  if (!code) {
+    redirect("/auth/error?reason=missing_code");
+  }
 
-  return (
-    <main style={{ padding: 32 }}>
-      <h2>Signing you in…</h2>
-      <p>Completing secure authentication.</p>
-    </main>
-  );
+  const qs = new URLSearchParams();
+  qs.set("code", code);
+  if (state) qs.set("state", state);
+
+  // Server token exchange + cookie set happens here:
+  redirect(`/api/auth/callback?${qs.toString()}`);
 }
