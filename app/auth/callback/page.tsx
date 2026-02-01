@@ -1,29 +1,56 @@
 // app/auth/callback/page.tsx
-import { redirect } from "next/navigation";
+"use client";
 
-type Props = {
-  searchParams?: Record<string, string | string[] | undefined>;
-};
+import React, { useEffect, useMemo } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
-function getParam(searchParams: Props["searchParams"], key: string): string | null {
-  const v = searchParams?.[key];
-  if (!v) return null;
-  if (Array.isArray(v)) return v[0] ?? null;
-  return v;
-}
+export default function AuthCallbackPage() {
+  const params = useSearchParams();
+  const router = useRouter();
 
-export default function AuthCallbackPage({ searchParams }: Props) {
-  const code = getParam(searchParams, "code");
-  const state = getParam(searchParams, "state");
+  const code = useMemo(() => params.get("code"), [params]);
+  const error = useMemo(() => params.get("error"), [params]);
+  const errorDescription = useMemo(() => params.get("error_description"), [params]);
 
-  if (!code) {
-    redirect("/auth/error?reason=missing_code");
-  }
+  useEffect(() => {
+    // If Cognito sent back an OAuth error, route to a friendly error page
+    if (error) {
+      const reason = errorDescription ? `${error}: ${errorDescription}` : error;
+      router.replace(`/auth/error?reason=${encodeURIComponent(reason)}`);
+      return;
+    }
 
-  const qs = new URLSearchParams();
-  qs.set("code", code);
-  if (state) qs.set("state", state);
+    // If we got here without a code, something is wrong with the sign-in link or Cognito config
+    if (!code) {
+      router.replace(`/auth/error?reason=${encodeURIComponent("missing_code")}`);
+      return;
+    }
 
-  // Server token exchange + cookie set happens here:
-  redirect(`/api/auth/callback?${qs.toString()}`);
+    // For now: just show success. Later we can exchange code for tokens via /oauth2/token (PKCE recommended).
+  }, [code, error, errorDescription, router]);
+
+  return (
+    <main style={{ padding: 32, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial" }}>
+      <h1>Signing you in…</h1>
+
+      {code ? (
+        <>
+          <p>Authorization code received:</p>
+          <pre
+            style={{
+              padding: 12,
+              background: "#f5f5f5",
+              borderRadius: 8,
+              overflowX: "auto",
+            }}
+          >
+            {code}
+          </pre>
+          <p style={{ marginTop: 12 }}>✅ Cognito login succeeded.</p>
+        </>
+      ) : (
+        <p>Waiting for authorization code…</p>
+      )}
+    </main>
+  );
 }
