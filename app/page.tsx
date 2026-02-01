@@ -1,3 +1,5 @@
+"use client";
+
 export default function Home() {
   const login = () => {
     const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!;
