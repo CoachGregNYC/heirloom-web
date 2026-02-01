@@ -1,86 +1,44 @@
 'use client';
 
-import { useState } from 'react';
-import { CognitoIdentityProviderClient, InitiateAuthCommand } from '@aws-sdk/client-cognito-identity-provider';
-import { useRouter } from 'next/navigation';
+import { useMemo } from 'react';
 
 export default function LoginPage() {
-  const router = useRouter();
+  const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!;
+  const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!;
+  const redirectUri = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI!;
+  const region = process.env.NEXT_PUBLIC_COGNITO_REGION!; // not used yet, but keeps config consistent
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    try {
-      const client = new CognitoIdentityProviderClient({
-        region: process.env.NEXT_PUBLIC_COGNITO_REGION,
-      });
-
-      const command = new InitiateAuthCommand({
-        AuthFlow: 'USER_PASSWORD_AUTH',
-        ClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!,
-        AuthParameters: {
-          USERNAME: email,
-          PASSWORD: password,
-        },
-      });
-
-      const response = await client.send(command);
-
-      if (!response.AuthenticationResult) {
-        throw new Error('Authentication failed');
-      }
-
-      // Store tokens (temporary — we’ll improve later)
-      localStorage.setItem('accessToken', response.AuthenticationResult.AccessToken!);
-      localStorage.setItem('idToken', response.AuthenticationResult.IdToken!);
-      localStorage.setItem('refreshToken', response.AuthenticationResult.RefreshToken!);
-
-      router.push('/');
-
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loginUrl = useMemo(() => {
+    // Cognito Hosted UI (Authorization Code Flow)
+    const url = new URL(`${domain}/login`);
+    url.searchParams.set('client_id', clientId);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('scope', 'openid email profile');
+    url.searchParams.set('redirect_uri', redirectUri);
+    return url.toString();
+  }, [domain, clientId, redirectUri]);
 
   return (
-    <main style={{ maxWidth: 420, margin: '80px auto', padding: 24 }}>
-      <h1>Heirloom</h1>
-      <p>Sign in to your family archive</p>
+    <main style={{ padding: 32, maxWidth: 420 }}>
+      <h1 style={{ fontSize: 28, marginBottom: 8 }}>Heirloom</h1>
+      <p style={{ marginBottom: 24 }}>Sign in to continue.</p>
 
-      <form onSubmit={handleLogin}>
-        <label>Email</label>
-        <input
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          required
-          style={{ width: '100%', marginBottom: 12 }}
-        />
+      <a
+        href={loginUrl}
+        style={{
+          display: 'inline-block',
+          padding: '12px 16px',
+          borderRadius: 10,
+          border: '1px solid #ccc',
+          textDecoration: 'none',
+        }}
+      >
+        Sign in (Email + Password)
+      </a>
 
-        <label>Password</label>
-        <input
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          required
-          style={{ width: '100%', marginBottom: 12 }}
-        />
-
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-
-        <button type="submit" disabled={loading}>
-          {loading ? 'Signing in…' : 'Sign In'}
-        </button>
-      </form>
+      <p style={{ marginTop: 18, fontSize: 12, opacity: 0.7 }}>
+        Region: {region}
+      </p>
     </main>
   );
 }
