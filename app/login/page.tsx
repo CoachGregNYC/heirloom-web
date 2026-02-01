@@ -1,38 +1,36 @@
-'use client';
-
-import { useMemo } from 'react';
+"use client";
 
 export default function LoginPage() {
-  const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!;
-  const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!;
-  const redirectUri = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI!;
+  const handleSignIn = () => {
+    const loginUrl =
+      "https://us-east-15adbu6zms.auth.us-east-1.amazoncognito.com/login" +
+      "?client_id=6v8fiesm524hddtugpcesmsn6p" +
+      "&response_type=code" +
+      "&scope=openid+email+profile" +
+      "&redirect_uri=" +
+      encodeURIComponent(
+        "https://main.dkva3zbv2kejl.amplifyapp.com/auth/callback"
+      );
 
-  const loginUrl = useMemo(() => {
-    const url = new URL(`${domain}/login`);
-    url.searchParams.set('client_id', clientId);
-    url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', 'openid email profile');
-    url.searchParams.set('redirect_uri', redirectUri);
-    return url.toString();
-  }, [domain, clientId, redirectUri]);
+    window.location.href = loginUrl;
+  };
 
   return (
-    <main style={{ padding: 32, maxWidth: 420 }}>
-      <h1 style={{ fontSize: 28, marginBottom: 8 }}>Heirloom</h1>
-      <p style={{ marginBottom: 24 }}>Sign in to continue.</p>
+    <main style={{ padding: "3rem" }}>
+      <h1>Heirloom</h1>
+      <p>Preserve what matters. Private, secure, family-first.</p>
 
-      <a
-        href={loginUrl}
+      <button
+        onClick={handleSignIn}
         style={{
-          display: 'inline-block',
-          padding: '12px 16px',
-          borderRadius: 10,
-          border: '1px solid #ccc',
-          textDecoration: 'none',
+          marginTop: "2rem",
+          padding: "0.75rem 1.5rem",
+          fontSize: "1rem",
+          cursor: "pointer",
         }}
       >
-        Sign in (Email + Password)
-      </a>
+        Sign in
+      </button>
     </main>
   );
 }
