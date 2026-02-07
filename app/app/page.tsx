@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import '../amplifyClient';
 
 // If you're using Amplify Storage v6 style imports, keep these.
 // If your current code imports differently, tell me what you're using and I’ll adjust.
