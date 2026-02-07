@@ -1,37 +1,32 @@
-"use client";
+'use client';
 
-export default function Home() {
-  const login = () => {
-    const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!;
-    const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!;
-    const redirectUri = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI!;
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { getCurrentUser } from 'aws-amplify/auth';
+import { ensureAmplifyConfigured } from './amplifyClient';
 
-    const loginUrl =
-      `${domain}/oauth2/authorize` +
-      `?response_type=code` +
-      `&client_id=${clientId}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&scope=openid+email+profile`;
+export default function HomePage() {
+  const router = useRouter();
+  const [status, setStatus] = useState<'working' | 'error'>('working');
 
-    window.location.href = loginUrl;
-  };
+  useEffect(() => {
+    ensureAmplifyConfigured();
+
+    (async () => {
+      try {
+        await getCurrentUser();
+        router.replace('/app');
+      } catch {
+        router.replace('/login');
+      }
+    })().catch(() => setStatus('error'));
+  }, [router]);
 
   return (
-    <main style={{ padding: 32 }}>
-      <h1>Heirloom</h1>
-      <p>Preserve what matters. Private, secure, family-first.</p>
-
-      <button
-        onClick={login}
-        style={{
-          marginTop: 24,
-          padding: "12px 18px",
-          fontSize: 16,
-          cursor: "pointer",
-        }}
-      >
-        Sign in
-      </button>
+    <main style={{ padding: 32, fontFamily: 'system-ui' }}>
+      <h1 style={{ marginBottom: 8 }}>Heirloom</h1>
+      {status === 'working' && <p>Loading…</p>}
+      {status === 'error' && <p>Could not determine session. Try refreshing.</p>}
     </main>
   );
 }
