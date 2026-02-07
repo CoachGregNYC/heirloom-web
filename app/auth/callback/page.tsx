@@ -1,55 +1,105 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ensureAmplifyConfigured } from '../../amplifyClient';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 function CallbackInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [status, setStatus] = useState<'working' | 'error' | 'done'>('working');
-  const [message, setMessage] = useState<string>('Completing sign-in…');
-  const hasRunRef = useRef(false);
+  const [message, setMessage] = useState<string>('Signing you in…');
+
+  const code = searchParams.get('code');
+  const error = searchParams.get('error');
+  const errorDescription = searchParams.get('error_description');
+
+  const cfg = useMemo(() => {
+    const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN; // e.g. https://xxx.auth.us-east-1.amazoncognito.com
+    const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
+    const redirectUri = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI; // https://.../auth/callback
+    return { domain, clientId, redirectUri };
+  }, []);
 
   useEffect(() => {
-    if (hasRunRef.current) return;
-    hasRunRef.current = true;
-
     async function run() {
+      if (error) {
+        setStatus('error');
+        setMessage(`${error}: ${errorDescription ?? 'Unknown error'}`);
+        return;
+      }
+
+      if (!code) {
+        setStatus('error');
+        setMessage('missing_code');
+        return;
+      }
+
+      const { domain, clientId, redirectUri } = cfg;
+      if (!domain || !clientId || !redirectUri) {
+        setStatus('error');
+        setMessage('Missing env vars: NEXT_PUBLIC_COGNITO_DOMAIN / CLIENT_ID / REDIRECT_URI');
+        return;
+      }
+
       try {
-        ensureAmplifyConfigured();
+        const tokenUrl = `${domain.replace(/\/$/, '')}/oauth2/token`;
 
-        // After Hosted UI redirects back, Amplify should be able to see the session.
-        // We simply check for tokens; if present, proceed.
-        const session = await fetchAuthSession();
+        const body = new URLSearchParams();
+        body.set('grant_type', 'authorization_code');
+        body.set('client_id', clientId);
+        body.set('code', code);
+        body.set('redirect_uri', redirectUri);
 
-        const hasTokens = !!session?.tokens?.accessToken && !!session?.tokens?.idToken;
-        if (!hasTokens) {
+        const res = await fetch(tokenUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text();
           setStatus('error');
-          setMessage(
-            'No session tokens found after redirect. This usually means Amplify OAuth is not configured (aws-exports oauth is empty) or redirect URIs do not match.'
-          );
+          setMessage(`Token exchange failed: HTTP ${res.status} ${txt}`);
           return;
         }
+
+        const data = (await res.json()) as {
+          id_token?: string;
+          access_token?: string;
+          refresh_token?: string;
+          expires_in?: number;
+          token_type?: string;
+        };
+
+        if (!data.id_token || !data.access_token) {
+          setStatus('error');
+          setMessage('Token exchange succeeded but missing id_token/access_token.');
+          return;
+        }
+
+        localStorage.setItem('heirloom_id_token', data.id_token);
+        localStorage.setItem('heirloom_access_token', data.access_token);
+        if (data.refresh_token) localStorage.setItem('heirloom_refresh_token', data.refresh_token);
+        if (data.expires_in) localStorage.setItem('heirloom_expires_in', String(data.expires_in));
 
         setStatus('done');
         setMessage('Signed in. Redirecting…');
         router.replace('/app');
       } catch (e: any) {
         setStatus('error');
-        setMessage(e?.message ?? 'Unknown error completing sign-in.');
+        setMessage(e?.message ?? 'Unknown error during token exchange');
       }
     }
 
     run();
-  }, [router]);
+  }, [code, error, errorDescription, cfg, router]);
 
   return (
     <main style={{ padding: 32, fontFamily: 'system-ui' }}>
       <h1 style={{ marginBottom: 8 }}>Heirloom</h1>
 
-      {status === 'working' && <p>Completing sign-in…</p>}
+      {status === 'working' && <p>Signing you in…</p>}
       {status === 'done' && <p>✅ {message}</p>}
       {status === 'error' && (
         <>
