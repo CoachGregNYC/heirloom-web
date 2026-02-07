@@ -1,0 +1,15 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-heirloom-dev-48b52-authRole",
+      "UnauthRoleArn": "arn:aws:iam::446100759389:role/amplify-heirloom-dev-48b52-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::446100759389:role/amplify-heirloom-dev-48b52-authRole",
+      "Region": "us-east-1",
+      "DeploymentBucketName": "amplify-heirloom-dev-48b52-deployment",
+      "UnauthRoleName": "amplify-heirloom-dev-48b52-unauthRole",
+      "StackName": "amplify-heirloom-dev-48b52",
+      "StackId": "arn:aws:cloudformation:us-east-1:446100759389:stack/amplify-heirloom-dev-48b52/fd2e6580-e8e0-11f0-8def-0e2622b5a741",
+      "AmplifyAppId": "dkva3zbv2kejl"
+    }
+  }
+}
