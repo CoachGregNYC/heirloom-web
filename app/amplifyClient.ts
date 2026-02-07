@@ -1,51 +1,42 @@
 'use client';
 
-import awsExports from '../aws-exports';
 import { Amplify } from 'aws-amplify';
+import awsExports from '../aws-exports';
 
 let configured = false;
 
-function requireEnv(name: string, value: string | undefined) {
-  if (!value) throw new Error(`Missing env var: ${name}`);
-  return value;
+function stripProtocol(url: string) {
+  return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
 export function ensureAmplifyConfigured() {
   if (configured) return;
 
-  const domain = requireEnv('NEXT_PUBLIC_COGNITO_DOMAIN', process.env.NEXT_PUBLIC_COGNITO_DOMAIN)
-    .replace(/^https?:\/\//, '') // Amplify expects domain without scheme
-    .replace(/\/$/, '');
+  const domainUrl = process.env.NEXT_PUBLIC_COGNITO_DOMAIN; // e.g. https://xxxx.auth.us-east-1.amazoncognito.com
+  const redirectSignIn = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI; // https://.../auth/callback
+  const redirectSignOut = process.env.NEXT_PUBLIC_COGNITO_LOGOUT_URI; // https://.../
 
-  const clientId = requireEnv('NEXT_PUBLIC_COGNITO_CLIENT_ID', process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID);
-  const redirectSignIn = requireEnv('NEXT_PUBLIC_COGNITO_REDIRECT_URI', process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI);
-  const redirectSignOut = requireEnv('NEXT_PUBLIC_COGNITO_LOGOUT_URI', process.env.NEXT_PUBLIC_COGNITO_LOGOUT_URI);
+  if (!domainUrl || !redirectSignIn || !redirectSignOut) {
+    // Don’t throw hard here; just configure base exports and let pages show a friendly error.
+    Amplify.configure(awsExports, { ssr: false });
+    configured = true;
+    return;
+  }
 
-  // Override ONLY what aws-exports is missing/incorrect for web OAuth
-  Amplify.configure({
-    Auth: {
-      Cognito: {
-        userPoolId: awsExports.aws_user_pools_id,
-        userPoolClientId: clientId, // IMPORTANT: use the web app client id you actually configured in Cognito
-        identityPoolId: awsExports.aws_cognito_identity_pool_id,
-        loginWith: {
-          oauth: {
-            domain,
-            scopes: ['openid', 'email', 'profile'],
-            redirectSignIn: [redirectSignIn],
-            redirectSignOut: [redirectSignOut],
-            responseType: 'code',
-          },
-        },
-      },
-    },
-    Storage: {
-      S3: {
-        bucket: awsExports.aws_user_files_s3_bucket,
-        region: awsExports.aws_user_files_s3_bucket_region,
-      },
-    },
-  });
+  const oauth = {
+    domain: stripProtocol(domainUrl),
+    scope: ['openid', 'email', 'profile'],
+    redirectSignIn,
+    redirectSignOut,
+    responseType: 'code' as const,
+  };
 
+  // Merge oauth into awsExports for Amplify Auth
+  const merged = {
+    ...awsExports,
+    oauth,
+  };
+
+  Amplify.configure(merged, { ssr: false });
   configured = true;
 }
