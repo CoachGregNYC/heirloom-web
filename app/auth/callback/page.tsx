@@ -1,51 +1,66 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ensureAmplifyConfigured } from '../../amplifyClient';
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ensureAmplifyConfigured } from '../amplifyClient';
+import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 
 function CallbackInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [status, setStatus] = useState<'working' | 'error' | 'done'>('working');
-  const [message, setMessage] = useState('Finishing sign-in…');
-  const ran = useRef(false);
+  const [message, setMessage] = useState<string>('Completing sign-in…');
+
+  const hasRunRef = useRef(false);
 
   useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
+    if (hasRunRef.current) return;
+    hasRunRef.current = true;
 
     async function run() {
       try {
         ensureAmplifyConfigured();
 
-        // Give Amplify a moment to process the Hosted UI redirect
-        // (fetchAuthSession will succeed once tokens are set)
-        const session = await fetchAuthSession();
-
-        if (session?.tokens?.accessToken && session?.tokens?.idToken) {
-          setStatus('done');
-          setMessage('Signed in. Redirecting…');
-          router.replace('/app');
+        const error = searchParams.get('error');
+        const errorDescription = searchParams.get('error_description');
+        if (error) {
+          setStatus('error');
+          setMessage(`${error}: ${errorDescription ?? 'Unknown error'}`);
           return;
         }
 
-        setStatus('error');
-        setMessage('No tokens found in session after redirect.');
+        const code = searchParams.get('code');
+        if (!code) {
+          setStatus('error');
+          setMessage('missing_code');
+          return;
+        }
+
+        // This is the key: let Amplify complete the Hosted UI redirect
+        // and establish Cognito UserPool session + Identity Pool credentials.
+        await fetchAuthSession({ forceRefresh: true });
+
+        // Confirm user exists
+        await getCurrentUser();
+
+        setStatus('done');
+        setMessage('Signed in. Redirecting…');
+        router.replace('/app');
       } catch (e: any) {
         setStatus('error');
-        setMessage(e?.message ?? 'Failed to complete sign-in.');
+        setMessage(e?.message ?? 'Unknown error completing sign-in');
       }
     }
 
     run();
-  }, [router]);
+  }, [router, searchParams]);
 
   return (
     <main style={{ padding: 32, fontFamily: 'system-ui' }}>
       <h1 style={{ marginBottom: 8 }}>Heirloom</h1>
 
-      {status === 'working' && <p>{message}</p>}
+      {status === 'working' && <p>Completing sign-in…</p>}
       {status === 'done' && <p>✅ {message}</p>}
       {status === 'error' && (
         <>
