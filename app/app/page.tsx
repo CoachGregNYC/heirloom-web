@@ -1,310 +1,287 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
-// Amplify Gen2 outputs file is typically at repo root.
-// From app/app/page.tsx, "../../amplify_outputs.json" is the correct relative path.
-import outputs from '../../amplify_outputs.json';
-
-import { Amplify } from 'aws-amplify';
+// If you're using Amplify Storage v6 style imports, keep these.
+// If your current code imports differently, tell me what you're using and I’ll adjust.
 import { list, getUrl } from 'aws-amplify/storage';
 
-type GalleryItem = {
-  key: string;        // full storage key/path
-  name: string;       // filename
-  url: string;        // signed URL
+type Item = {
+  key: string;
+  url: string;
 };
 
-const STORAGE_PREFIX = 'protected/family-filing-cabinet/originals/';
-
-function ensureAmplifyConfigured() {
-  // Avoid double-configure in dev/hot reload.
-  const g = globalThis as any;
-  if (g.__heirloomAmplifyConfigured) return;
-
-  Amplify.configure(outputs);
-  g.__heirloomAmplifyConfigured = true;
-}
-
 export default function AppHomePage() {
-  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
+  const [signedIn, setSignedIn] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<GalleryItem[]>([]);
+
+  const [items, setItems] = useState<Item[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
 
-  const [selected, setSelected] = useState<GalleryItem | null>(null);
+  // Folder you want to browse in the Amplify Storage bucket
+  const prefix = useMemo(
+    () => 'protected/family-filing-cabinet/originals/',
+    []
+  );
 
-  const cfg = useMemo(() => {
-    const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN;
-    const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
-    const logoutUri = process.env.NEXT_PUBLIC_COGNITO_LOGOUT_URI;
-    return { domain, clientId, logoutUri };
+  useEffect(() => {
+    setMounted(true);
   }, []);
 
-  // Basic gate: if no token, send to /login
   useEffect(() => {
-    const access = localStorage.getItem('heirloom_access_token');
-    const idt = localStorage.getItem('heirloom_id_token');
-
-    if (!access || !idt) {
-      router.replace('/login');
-      return;
-    }
-  }, [router]);
-
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-
+    // IMPORTANT: nothing in this effect runs during build/prerender,
+    // so it's safe to touch localStorage / window here.
+    async function run() {
       try {
-        ensureAmplifyConfigured();
+        setError(null);
+        setLoading(true);
 
-        // List objects under the protected prefix
+        const idToken =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem('heirloom_id_token')
+            : null;
+
+        const accessToken =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem('heirloom_access_token')
+            : null;
+
+        const isAuthed = Boolean(idToken && accessToken);
+        setSignedIn(isAuthed);
+
+        if (!isAuthed) {
+          // Not signed in: don't try to hit S3
+          setItems([]);
+          setLoading(false);
+          return;
+        }
+
+        // List objects in protected folder
         const res = await list({
-          path: STORAGE_PREFIX,
+          path: prefix,
           options: {
-            // listAll is helpful if you upload more than 1 page worth later
-            listAll: true,
+            // if you later add pagination, Amplify returns nextToken
+            // you can handle that here
           },
         });
 
-        // Filter to files (Amplify can return "folders" too)
-        const files = (res.items ?? []).filter((x: any) => {
-          const p = x?.path ?? x?.key ?? '';
-          return p && !String(p).endsWith('/');
-        });
+        // Some objects may be "folder markers" or empty keys; filter safely
+        const keys = (res.items ?? [])
+          .map((x) => x.path)
+          .filter((k): k is string => Boolean(k) && !k.endsWith('/'));
 
-        // Build signed URLs for display
-        const gallery: GalleryItem[] = [];
-        for (const f of files) {
-          const key = (f as any).path ?? (f as any).key;
-          if (!key) continue;
-
-          const filename = String(key).split('/').pop() || String(key);
-
-          const signed = await getUrl({
+        // Build signed URLs
+        const urls: Item[] = [];
+        for (const key of keys) {
+          const u = await getUrl({
             path: key,
             options: {
-              // 15 minutes is plenty for viewing
-              expiresIn: 60 * 15,
+              // keep short TTL; you can change later
+              expiresIn: 60 * 5,
             },
           });
 
-          gallery.push({
-            key: String(key),
-            name: filename,
-            url: signed.url.toString(),
+          urls.push({
+            key,
+            url: u.url.toString(),
           });
         }
 
-        // Sort newest-ish by name (we’ll improve later with metadata)
-        gallery.sort((a, b) => a.name.localeCompare(b.name));
-
-        setItems(gallery);
-      } catch (e: any) {
-        setError(e?.message ?? 'Unknown error loading Family Filing Cabinet');
-      } finally {
+        setItems(urls);
         setLoading(false);
+      } catch (e: any) {
+        setLoading(false);
+        setError(e?.message ?? String(e));
       }
     }
 
-    load();
-  }, []);
+    // Only run after mount so no build-time weirdness.
+    if (mounted) run();
+  }, [mounted, prefix]);
+
+  function buildHostedLogoutUrl() {
+    // Use the env vars you already set in Amplify Hosting → Environment variables
+    const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN;
+    const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
+    const logoutUri = process.env.NEXT_PUBLIC_COGNITO_LOGOUT_URI;
+
+    if (!domain || !clientId || !logoutUri) return null;
+
+    const base = domain.replace(/\/$/, '');
+    const u = new URL(`${base}/logout`);
+    u.searchParams.set('client_id', clientId);
+    u.searchParams.set('logout_uri', logoutUri);
+    return u.toString();
+  }
 
   function signOut() {
-    // Clear local session
-    localStorage.removeItem('heirloom_id_token');
-    localStorage.removeItem('heirloom_access_token');
-    localStorage.removeItem('heirloom_refresh_token');
-    localStorage.removeItem('heirloom_expires_in');
+    try {
+      window.localStorage.removeItem('heirloom_id_token');
+      window.localStorage.removeItem('heirloom_access_token');
+      window.localStorage.removeItem('heirloom_refresh_token');
+      window.localStorage.removeItem('heirloom_expires_in');
+    } catch {}
 
-    const { domain, clientId, logoutUri } = cfg;
-
-    // If env vars exist, sign out of Cognito hosted UI too
-    if (domain && clientId && logoutUri) {
-      const base = domain.replace(/\/$/, '');
-      const url =
-        `${base}/logout` +
-        `?client_id=${encodeURIComponent(clientId)}` +
-        `&logout_uri=${encodeURIComponent(logoutUri)}`;
-
+    const url = buildHostedLogoutUrl();
+    if (url) {
       window.location.href = url;
       return;
     }
 
-    // Fallback
-    router.replace('/login');
+    // fallback
+    window.location.href = '/';
+  }
+
+  // Render guard: during prerender/build, mounted is false
+  if (!mounted) {
+    return (
+      <main style={{ padding: 32, fontFamily: 'system-ui' }}>
+        <h1>Heirloom</h1>
+        <p>Loading…</p>
+      </main>
+    );
   }
 
   return (
-    <main style={{ padding: 32, fontFamily: 'system-ui', maxWidth: 1100, margin: '0 auto' }}>
-      <header style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Heirloom</h1>
-          <p style={{ marginTop: 8, opacity: 0.8 }}>
-            Family Filing Cabinet → <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{STORAGE_PREFIX}</span>
-          </p>
-        </div>
+    <main style={{ padding: 32, fontFamily: 'system-ui' }}>
+      <h1 style={{ marginBottom: 8 }}>Heirloom</h1>
 
+      {signedIn ? (
+        <p style={{ marginTop: 0 }}>
+          ✅ <strong>Signed in.</strong>
+        </p>
+      ) : (
+        <p style={{ marginTop: 0 }}>
+          ⚠️ <strong>Not signed in.</strong> Go to the home page and click “Sign in”.
+        </p>
+      )}
+
+      <div style={{ marginTop: 16, marginBottom: 16 }}>
         <button
           onClick={signOut}
           style={{
             padding: '10px 14px',
-            borderRadius: 10,
-            border: '1px solid rgba(0,0,0,0.15)',
+            borderRadius: 8,
+            border: '1px solid #ccc',
             background: 'white',
             cursor: 'pointer',
           }}
         >
           Sign out
         </button>
-      </header>
+      </div>
 
-      <section
+      <div
         style={{
-          marginTop: 18,
           padding: 16,
-          borderRadius: 14,
-          border: '1px solid rgba(0,0,0,0.12)',
-          background: 'rgba(0,0,0,0.02)',
+          border: '1px solid #e5e5e5',
+          borderRadius: 12,
+          marginBottom: 16,
+          maxWidth: 900,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <div>
-            <div style={{ fontWeight: 700 }}>✅ Signed in.</div>
-            <div style={{ opacity: 0.8, marginTop: 6 }}>
-              Choose a photo below. Next we’ll turn the selected photo into a full Heirloom entry.
-            </div>
-          </div>
-
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontWeight: 700 }}>{items.length} photo(s)</div>
-            <div style={{ opacity: 0.7, fontSize: 13 }}>{loading ? 'Loading…' : 'Ready'}</div>
-          </div>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>
+          Family Filing Cabinet
         </div>
-      </section>
+        <div style={{ color: '#444' }}>
+          Browsing: <code>{prefix}</code>
+        </div>
+      </div>
 
       {error && (
-        <section style={{ marginTop: 18 }}>
-          <div
-            style={{
-              padding: 14,
-              borderRadius: 12,
-              border: '1px solid rgba(255,0,0,0.25)',
-              background: 'rgba(255,0,0,0.06)',
-            }}
-          >
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Error loading photos</div>
-            <div style={{ whiteSpace: 'pre-wrap' }}>{error}</div>
-          </div>
-        </section>
+        <div
+          style={{
+            padding: 12,
+            border: '1px solid #f5c2c7',
+            background: '#f8d7da',
+            borderRadius: 10,
+            maxWidth: 900,
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Error</div>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{error}</div>
+        </div>
       )}
 
-      <section style={{ marginTop: 22 }}>
-        {loading ? (
-          <p>Loading your Family Filing Cabinet photos…</p>
-        ) : items.length === 0 ? (
+      {loading && <p>Loading photos…</p>}
+
+      {!loading && signedIn && items.length === 0 && !error && (
+        <p>
+          No photos found under <code>{prefix}</code>.
+          <br />
+          Confirm the objects are uploaded to that exact path in S3.
+        </p>
+      )}
+
+      {!loading && items.length > 0 && (
+        <>
+          <div style={{ marginBottom: 10 }}>
+            {selectedKey ? (
+              <>
+                Selected: <code>{selectedKey}</code>
+              </>
+            ) : (
+              <>Select a photo to create a new Heirloom.</>
+            )}
+          </div>
+
           <div
             style={{
-              padding: 18,
-              borderRadius: 14,
-              border: '1px dashed rgba(0,0,0,0.25)',
-              background: 'rgba(0,0,0,0.02)',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+              gap: 12,
+              maxWidth: 1100,
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>No photos found yet.</div>
-            <div style={{ opacity: 0.85 }}>
-              Upload images to:
-              <div style={{ marginTop: 8, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
-                {STORAGE_PREFIX}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                gap: 14,
-              }}
-            >
-              {items.map((it) => {
-                const isSelected = selected?.key === it.key;
-
-                return (
-                  <button
-                    key={it.key}
-                    onClick={() => setSelected(it)}
+            {items.map((it) => {
+              const selected = selectedKey === it.key;
+              return (
+                <button
+                  key={it.key}
+                  onClick={() => setSelectedKey(it.key)}
+                  style={{
+                    border: selected ? '2px solid #111' : '1px solid #ddd',
+                    borderRadius: 12,
+                    padding: 8,
+                    background: 'white',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <img
+                    src={it.url}
+                    alt={it.key}
                     style={{
-                      textAlign: 'left',
-                      padding: 0,
-                      borderRadius: 14,
-                      border: isSelected ? '2px solid rgba(0,0,0,0.7)' : '1px solid rgba(0,0,0,0.12)',
-                      background: 'white',
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                      boxShadow: isSelected ? '0 8px 24px rgba(0,0,0,0.12)' : 'none',
+                      width: '100%',
+                      height: 140,
+                      objectFit: 'cover',
+                      borderRadius: 10,
+                      display: 'block',
+                      marginBottom: 8,
                     }}
-                    title={it.name}
+                  />
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: '#444',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={it.key}
                   >
-                    <div style={{ aspectRatio: '4 / 3', background: 'rgba(0,0,0,0.04)' }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={it.url}
-                        alt={it.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        loading="lazy"
-                      />
-                    </div>
-                    <div style={{ padding: 10 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {it.name}
-                      </div>
-                      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                        {isSelected ? 'Selected' : 'Click to select'}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-              <div style={{ opacity: 0.85 }}>
-                {selected ? (
-                  <>
-                    Selected: <span style={{ fontWeight: 700 }}>{selected.name}</span>
-                  </>
-                ) : (
-                  'Select a photo to begin creating an Heirloom entry.'
-                )}
-              </div>
-
-              <button
-                disabled={!selected}
-                onClick={() => {
-                  // Next step: build /app/heirlooms/new that pre-fills selected image
-                  alert('Next step: Create Heirloom entry from selected photo (we build this next).');
-                }}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(0,0,0,0.15)',
-                  background: selected ? 'white' : 'rgba(0,0,0,0.04)',
-                  cursor: selected ? 'pointer' : 'not-allowed',
-                  opacity: selected ? 1 : 0.6,
-                }}
-              >
-                Create Heirloom from selected photo
-              </button>
-            </div>
-          </>
-        )}
-      </section>
+                    {it.key.replace(prefix, '')}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </main>
   );
 }
