@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Hub } from 'aws-amplify/utils';
+import { getCurrentUser } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '../../amplifyClient';
 
 export default function CallbackPage() {
@@ -11,21 +11,14 @@ export default function CallbackPage() {
   useEffect(() => {
     ensureAmplifyConfigured();
 
-    const unsub = Hub.listen('auth', ({ payload }) => {
-      if (payload.event === 'signIn') {
-        router.replace('/app');
-      }
-      if (payload.event === 'signIn_failure') {
-        router.replace('/login');
-      }
-    });
-
-    return () => unsub();
+    getCurrentUser()
+      .then(() => router.replace('/app'))
+      .catch(() => router.replace('/login'));
   }, [router]);
 
   return (
-    <main style={{ padding: 32 }}>
-      <h1>Heirloom</h1>
+    <main style={{ padding: 32, fontFamily: 'system-ui' }}>
+      <h1 style={{ marginBottom: 8 }}>Heirloom</h1>
       <p>Completing sign-in…</p>
     </main>
   );
