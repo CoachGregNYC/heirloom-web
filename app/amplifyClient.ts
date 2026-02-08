@@ -1,3 +1,5 @@
+cd ~/Documents/heirloom-web
+cat > app/amplifyClient.ts <<'EOF'
 'use client';
 
 import { Amplify } from 'aws-amplify';
@@ -5,50 +7,61 @@ import awsExports from '../aws-exports';
 
 let configured = false;
 
-function pickRedirects(redirects: string | undefined): string[] {
-  const list = (redirects ?? '')
+function toStringArray(v: unknown): string[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.map(String).filter(Boolean);
+
+  const s = String(v).trim();
+  if (!s) return [];
+
+  // aws-exports often uses comma-separated redirects
+  return s
     .split(',')
-    .map((s) => s.trim())
+    .map((x) => x.trim())
     .filter(Boolean);
+}
 
-  if (list.length === 0) return [];
+function stripProtocol(domainLike: string): string {
+  return domainLike.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+}
 
-  const origin =
-    typeof window !== 'undefined' ? window.location.origin.toLowerCase() : '';
-  const exactOriginMatch = list.find((u) => u.toLowerCase().startsWith(origin));
-  if (exactOriginMatch) return [exactOriginMatch];
-
-  const httpsMatch = list.find((u) => u.toLowerCase().startsWith('https://'));
-  if (httpsMatch) return [httpsMatch];
-
-  return [list[0]];
+function pickBestRedirect(urls: string[]): string[] {
+  // Prefer the current origin if present, else fall back to first entry.
+  if (typeof window === 'undefined') return urls.slice(0, 1);
+  const origin = window.location.origin;
+  const match = urls.find((u) => u.startsWith(origin));
+  return match ? [match] : urls.slice(0, 1);
 }
 
 export function ensureAmplifyConfigured() {
   if (configured) return;
-  if (typeof window === 'undefined') return;
 
-  const anyExports: any = awsExports as any;
+  const anyExports: any = (awsExports as any)?.default ?? awsExports;
 
-  // Old aws-exports.js shape (what you printed via node)
   const region =
-    anyExports.aws_project_region || anyExports.aws_user_files_s3_bucket_region;
+    anyExports.aws_project_region || anyExports.aws_user_files_s3_bucket_region || 'us-east-1';
 
-  const oauth = anyExports.oauth || {};
-  const redirectSignIn = pickRedirects(oauth.redirectSignIn);
-  const redirectSignOut = pickRedirects(oauth.redirectSignOut);
+  const oauth = anyExports.oauth ?? {};
 
-  const amplifyV6Config = {
+  const redirectInAll = toStringArray(oauth.redirectSignIn);
+  const redirectOutAll = toStringArray(oauth.redirectSignOut);
+
+  // v6 expects arrays (string[])
+  const redirectSignIn = pickBestRedirect(redirectInAll);
+  const redirectSignOut = pickBestRedirect(redirectOutAll);
+
+  // v6 expects domain WITHOUT https://
+  const domain = stripProtocol(String(oauth.domain ?? ''));
+
+  const amplifyV6Config: any = {
     Auth: {
       Cognito: {
         userPoolId: anyExports.aws_user_pools_id,
         userPoolClientId: anyExports.aws_user_pools_web_client_id,
         identityPoolId: anyExports.aws_cognito_identity_pool_id,
-
-        // Hosted UI / OAuth
         loginWith: {
           oauth: {
-            domain: oauth.domain,
+            domain,
             scopes: oauth.scope ?? ['openid', 'email', 'profile'],
             redirectSignIn,
             redirectSignOut,
@@ -59,12 +72,13 @@ export function ensureAmplifyConfigured() {
     },
   };
 
-  // Helpful runtime sanity log (you can remove later)
-  console.log('[Amplify] OAuth domain:', amplifyV6Config.Auth.Cognito.loginWith.oauth.domain);
-console.log('[Amplify] redirectSignIn:', redirectSignIn.join(', '));
-console.log('[Amplify] redirectSignOut:', redirectSignOut.join(', '));
+  // Debug (keep for now)
+  console.log('[Amplify] domain:', domain);
+  console.log('[Amplify] redirectSignIn:', redirectSignIn);
+  console.log('[Amplify] redirectSignOut:', redirectSignOut);
 
   Amplify.configure(amplifyV6Config);
 
   configured = true;
 }
+EOF
