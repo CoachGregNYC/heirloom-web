@@ -1,5 +1,3 @@
-cd ~/Documents/heirloom-web
-cat > app/amplifyClient.ts <<'EOF'
 'use client';
 
 import { Amplify } from 'aws-amplify';
@@ -81,4 +79,3 @@ export function ensureAmplifyConfigured() {
 
   configured = true;
 }
-EOF
