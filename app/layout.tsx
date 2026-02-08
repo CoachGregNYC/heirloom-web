@@ -1,10 +1,5 @@
 import React from 'react';
 
-export const metadata = {
-  title: 'Heirloom',
-  description: 'Preserve what matters. Private, secure, family-first.',
-};
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
