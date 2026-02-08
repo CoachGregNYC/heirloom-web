@@ -8,8 +8,11 @@ let configured = false;
 export function ensureAmplifyConfigured() {
   if (configured) return;
 
-  // Configure Amplify once on the client
-  Amplify.configure(awsExports, { ssr: true });
+  // Safety: only configure in the browser
+  if (typeof window === 'undefined') return;
+
+  // Client-only config (most reliable for Amplify Hosting static output)
+  Amplify.configure(awsExports);
 
   configured = true;
 }

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithRedirect, getCurrentUser } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '../amplifyClient';
 
 export default function LoginPage() {
   const router = useRouter();
+  const [error, setError] = useState<string>('');
 
   useEffect(() => {
     ensureAmplifyConfigured();
@@ -20,8 +21,18 @@ export default function LoginPage() {
   }, [router]);
 
   const onSignIn = async () => {
+    setError('');
     ensureAmplifyConfigured();
-    await signInWithRedirect();
+
+    try {
+      console.log('[Login] signIn clicked, calling signInWithRedirect()...');
+      await signInWithRedirect();
+      console.log('[Login] signInWithRedirect() returned (it usually redirects before this).');
+    } catch (e: any) {
+      console.error('[Login] signInWithRedirect failed:', e);
+      setError(e?.message ?? String(e) ?? 'Unknown sign-in error');
+      alert(`Sign-in failed: ${e?.message ?? e}`);
+    }
   };
 
   return (
@@ -43,6 +54,12 @@ export default function LoginPage() {
       >
         Sign in
       </button>
+
+      {error ? (
+        <p style={{ marginTop: 16, color: '#b00020' }}>
+          <strong>Error:</strong> {error}
+        </p>
+      ) : null}
     </main>
   );
 }
