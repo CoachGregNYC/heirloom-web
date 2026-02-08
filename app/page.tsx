@@ -1,23 +1,26 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { getCurrentUser } from 'aws-amplify/auth';
+import { ensureAmplifyConfigured } from './amplifyClient';
 
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const access = localStorage.getItem('heirloom_access_token');
-    const id = localStorage.getItem('heirloom_id_token');
+    ensureAmplifyConfigured();
 
-    if (access && id) router.replace('/app');
-    else router.replace('/login');
+    // If signed in → go to /app, else → /login
+    getCurrentUser()
+      .then(() => router.replace('/app'))
+      .catch(() => router.replace('/login'));
   }, [router]);
 
   return (
     <main style={{ padding: 32, fontFamily: 'system-ui' }}>
-      <h1 style={{ marginBottom: 8 }}>Heirloom</h1>
+      <h1>Heirloom</h1>
       <p>Loading…</p>
     </main>
   );
-}// cache-bust Sun Feb  8 09:08:49 EST 2026
+}
