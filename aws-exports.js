@@ -8,9 +8,17 @@ const awsmobile = {
   aws_cognito_region: "us-east-1",
 
   aws_user_pools_id: "us-east-1_EnmcuYnr5",
-  aws_user_pools_web_client_id: "6v8fiesm524hddtugpcesmsn6p", // ✅ MUST MATCH COGNITO
+  aws_user_pools_web_client_id: "6v8fiesm524hddtugpcesmsn6p",
 
-  oauth: {},
+  oauth: {
+    domain: "us-east-15adbu6zms.auth.us-east-1.amazoncognito.com",
+    scope: ["openid", "email", "profile"],
+    redirectSignIn:
+      "http://localhost:3000/auth/callback,https://main.dkva3zbv2kejl.amplifyapp.com/auth/callback",
+    redirectSignOut:
+      "http://localhost:3000/,https://main.dkva3zbv2kejl.amplifyapp.com/",
+    responseType: "code",
+  },
 
   aws_cognito_username_attributes: [],
   aws_cognito_social_providers: [],
