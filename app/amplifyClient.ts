@@ -5,56 +5,61 @@ import awsExportsRaw from '../aws-exports';
 
 let configured = false;
 
+function stripProtocol(domainLike: string): string {
+  return domainLike.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+}
+
 function toStringArray(v: unknown): string[] {
   if (!v) return [];
-  if (Array.isArray(v)) return v.map(String).map((s) => s.trim()).filter(Boolean);
+  if (Array.isArray(v)) return v.map(String).filter(Boolean);
 
   const s = String(v).trim();
   if (!s) return [];
 
-  // aws-exports often uses comma-separated redirects
   return s
     .split(',')
     .map((x) => x.trim())
     .filter(Boolean);
 }
 
-function stripProtocol(domainLike: string): string {
-  return domainLike.replace(/^https?:\/\//i, '').replace(/\/$/, '');
-}
+function pickBestRedirect(urls: string[]): string[] {
+  // Amplify v6 expects string[] for redirectSignIn/Out
+  if (urls.length === 0) return [];
 
-function preferOriginFirst(urls: string[]): string[] {
-  if (typeof window === 'undefined') return urls;
+  if (typeof window === 'undefined') {
+    return [urls[0]];
+  }
+
   const origin = window.location.origin;
   const match = urls.find((u) => u.startsWith(origin));
-  if (!match) return urls;
-  return [match, ...urls.filter((u) => u !== match)];
+  return [match ?? urls[0]];
 }
 
 export function ensureAmplifyConfigured() {
   if (configured) return;
 
-  // IMPORTANT: never configure during SSR/build — only in the browser.
-  if (typeof window === 'undefined') return;
+  const cfg: any = (awsExportsRaw as any)?.default ?? awsExportsRaw;
 
-  const ex: any = (awsExportsRaw as any)?.default ?? awsExportsRaw;
+  const oauth = cfg?.oauth ?? {};
 
-  const oauth = ex?.oauth ?? {};
   const domain = stripProtocol(String(oauth.domain ?? ''));
 
-  const redirectSignIn = preferOriginFirst(toStringArray(oauth.redirectSignIn));
-  const redirectSignOut = preferOriginFirst(toStringArray(oauth.redirectSignOut));
+  const redirectSignInAll = toStringArray(oauth.redirectSignIn);
+  const redirectSignOutAll = toStringArray(oauth.redirectSignOut);
+
+  const redirectSignIn = pickBestRedirect(redirectSignInAll);
+  const redirectSignOut = pickBestRedirect(redirectSignOutAll);
 
   const amplifyV6Config: any = {
     Auth: {
       Cognito: {
-        userPoolId: ex.aws_user_pools_id,
-        userPoolClientId: ex.aws_user_pools_web_client_id,
-        identityPoolId: ex.aws_cognito_identity_pool_id,
+        userPoolId: cfg.aws_user_pools_id,
+        userPoolClientId: cfg.aws_user_pools_web_client_id,
+        identityPoolId: cfg.aws_cognito_identity_pool_id,
         loginWith: {
           oauth: {
             domain,
-            scopes: Array.isArray(oauth.scope) ? oauth.scope : ['openid', 'email', 'profile'],
+            scopes: oauth.scope ?? ['openid', 'email', 'profile'],
             redirectSignIn,
             redirectSignOut,
             responseType: oauth.responseType ?? 'code',
@@ -64,20 +69,23 @@ export function ensureAmplifyConfigured() {
     },
   };
 
-    console.log('✅✅✅ AMPLIFY CONFIG LOADED (v6) ✅✅✅');
+  // Loud debug so you can confirm what is live in prod
+  // eslint-disable-next-line no-console
+  console.log('✅✅✅ AMPLIFY CONFIG LOADED (v6) ✅✅✅');
+  // eslint-disable-next-line no-console
   console.log('[Amplify v6 oauth]:', amplifyV6Config.Auth.Cognito.loginWith.oauth);
+
+  // Basic sanity check (this is what your current error complains about)
+  const oauthCfg = amplifyV6Config.Auth?.Cognito?.loginWith?.oauth;
+  if (!oauthCfg?.domain || !oauthCfg?.redirectSignIn?.length || !oauthCfg?.redirectSignOut?.length) {
+    throw new Error(
+      `Amplify OAuth config missing required fields: domain=${oauthCfg?.domain} redirectSignIn=${String(
+        oauthCfg?.redirectSignIn
+      )} redirectSignOut=${String(oauthCfg?.redirectSignOut)}`
+    );
+  }
 
   Amplify.configure(amplifyV6Config);
 
-  // Immediately verify runtime config is intact
-  const anyAmp: any = Amplify as any;
-  const cfgNow = anyAmp?.getConfig?.() || anyAmp?.configure?.() || null; // tolerate differences
-  // If getConfig exists, check it; otherwise we at least logged what we set above.
-  if (anyAmp?.getConfig) {
-    const oauthNow = anyAmp.getConfig()?.Auth?.Cognito?.loginWith?.oauth;
-    if (!oauthNow) {
-      throw new Error('Amplify runtime config missing Auth.Cognito.loginWith.oauth (overwritten?)');
-    }
-  }
-
   configured = true;
+}
