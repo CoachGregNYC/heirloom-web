@@ -9,46 +9,35 @@ function stripProtocol(domainLike: string): string {
   return domainLike.replace(/^https?:\/\//i, '').replace(/\/$/, '');
 }
 
-function toStringArray(v: unknown): string[] {
-  if (!v) return [];
-  if (Array.isArray(v)) return v.map(String).filter(Boolean);
-
-  const s = String(v).trim();
-  if (!s) return [];
-
-  return s
-    .split(',')
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
-function pickBestRedirect(urls: string[]): string[] {
-  // Amplify v6 expects string[] for redirectSignIn/Out
-  if (urls.length === 0) return [];
-
-  if (typeof window === 'undefined') {
-    return [urls[0]];
+function firstNonEmpty(...vals: Array<unknown>): string {
+  for (const v of vals) {
+    const s = String(v ?? '').trim();
+    if (s) return s;
   }
-
-  const origin = window.location.origin;
-  const match = urls.find((u) => u.startsWith(origin));
-  return [match ?? urls[0]];
+  return '';
 }
 
 export function ensureAmplifyConfigured() {
   if (configured) return;
 
   const cfg: any = (awsExportsRaw as any)?.default ?? awsExportsRaw;
-
   const oauth = cfg?.oauth ?? {};
 
-  const domain = stripProtocol(String(oauth.domain ?? ''));
+  // ✅ Always derive redirects from the current site at runtime (works for localhost + Amplify)
+  // Amplify v6 expects arrays (string[])
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : '';
 
-  const redirectSignInAll = toStringArray(oauth.redirectSignIn);
-  const redirectSignOutAll = toStringArray(oauth.redirectSignOut);
+  const redirectSignIn = origin ? [`${origin}/auth/callback`] : [];
+  const redirectSignOut = origin ? [`${origin}/`] : [];
 
-  const redirectSignIn = pickBestRedirect(redirectSignInAll);
-  const redirectSignOut = pickBestRedirect(redirectSignOutAll);
+  // ✅ Domain: prefer NEXT_PUBLIC_COGNITO_DOMAIN if set, else fall back to aws-exports
+  // Domain must be WITHOUT https://
+  const domain = stripProtocol(
+    firstNonEmpty(process.env.NEXT_PUBLIC_COGNITO_DOMAIN, oauth.domain)
+  );
 
   const amplifyV6Config: any = {
     Auth: {
@@ -69,21 +58,9 @@ export function ensureAmplifyConfigured() {
     },
   };
 
-  // Loud debug so you can confirm what is live in prod
+  // Debug so we can see EXACTLY what prod is using
   // eslint-disable-next-line no-console
-  console.log('✅✅✅ AMPLIFY CONFIG LOADED (v6) ✅✅✅');
-  // eslint-disable-next-line no-console
-  console.log('[Amplify v6 oauth]:', amplifyV6Config.Auth.Cognito.loginWith.oauth);
-
-  // Basic sanity check (this is what your current error complains about)
-  const oauthCfg = amplifyV6Config.Auth?.Cognito?.loginWith?.oauth;
-  if (!oauthCfg?.domain || !oauthCfg?.redirectSignIn?.length || !oauthCfg?.redirectSignOut?.length) {
-    throw new Error(
-      `Amplify OAuth config missing required fields: domain=${oauthCfg?.domain} redirectSignIn=${String(
-        oauthCfg?.redirectSignIn
-      )} redirectSignOut=${String(oauthCfg?.redirectSignOut)}`
-    );
-  }
+  console.log('✅ AMPLIFY v6 CONFIG', amplifyV6Config.Auth.Cognito.loginWith.oauth);
 
   Amplify.configure(amplifyV6Config);
 
