@@ -64,8 +64,20 @@ export function ensureAmplifyConfigured() {
     },
   };
 
+    console.log('✅✅✅ AMPLIFY CONFIG LOADED (v6) ✅✅✅');
   console.log('[Amplify v6 oauth]:', amplifyV6Config.Auth.Cognito.loginWith.oauth);
 
   Amplify.configure(amplifyV6Config);
+
+  // Immediately verify runtime config is intact
+  const anyAmp: any = Amplify as any;
+  const cfgNow = anyAmp?.getConfig?.() || anyAmp?.configure?.() || null; // tolerate differences
+  // If getConfig exists, check it; otherwise we at least logged what we set above.
+  if (anyAmp?.getConfig) {
+    const oauthNow = anyAmp.getConfig()?.Auth?.Cognito?.loginWith?.oauth;
+    if (!oauthNow) {
+      throw new Error('Amplify runtime config missing Auth.Cognito.loginWith.oauth (overwritten?)');
+    }
+  }
+
   configured = true;
-}
