@@ -8,7 +8,7 @@ const awsmobile = {
   aws_cognito_region: "us-east-1",
 
   aws_user_pools_id: "us-east-1_EnmcuYnr5",
-  aws_user_pools_web_client_id: "6v8fiesm524hddtugpcesmsn6p",
+aws_user_pools_web_client_id: "6qb4nf3o763ci5ugn88iv5jd27"
 
   oauth: {
     domain: "us-east-15adbu6zms.auth.us-east-1.amazoncognito.com",
