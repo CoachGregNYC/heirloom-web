@@ -7,7 +7,7 @@ import { ensureAmplifyConfigured } from '../../amplifyClient';
 
 export default function CallbackPage() {
   const router = useRouter();
-  const [msg, setMsg] = useState('Exchanging auth code for tokens…');
+  const [msg, setMsg] = useState('Completing sign-in...');
 
   useEffect(() => {
     let cancelled = false;
@@ -16,19 +16,16 @@ export default function CallbackPage() {
       try {
         ensureAmplifyConfigured();
 
-        // This is what triggers the Hosted UI "code" exchange in v6
+        setMsg('Exchanging auth code for tokens (fetchAuthSession)...');
         await fetchAuthSession();
 
-        // Extra validation: should succeed if tokens are now stored
+        // Verify we actually have a user now
         await getCurrentUser();
 
         if (!cancelled) router.replace('/app');
-      } catch (err: any) {
+      } catch (err) {
         console.error('[auth/callback] failed:', err);
-        if (!cancelled) {
-          setMsg(`Sign-in failed: ${err?.message ?? 'Unknown error'}`);
-          // If you want: router.replace('/login');
-        }
+        if (!cancelled) router.replace('/auth/error');
       }
     })();
 

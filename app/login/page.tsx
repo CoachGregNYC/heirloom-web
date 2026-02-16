@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getCurrentUser, signInWithRedirect } from 'aws-amplify/auth';
+import { signInWithRedirect, getCurrentUser } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '../amplifyClient';
 
 export default function LoginPage() {
@@ -13,14 +13,12 @@ export default function LoginPage() {
 
     getCurrentUser()
       .then(() => router.replace('/app'))
-      .catch(() => {
-        /* not signed in */
-      });
+      .catch(() => {});
   }, [router]);
 
   const onSignIn = async () => {
     ensureAmplifyConfigured();
-    await signInWithRedirect(); // Hosted UI
+    await signInWithRedirect();
   };
 
   return (
