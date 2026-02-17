@@ -18,14 +18,13 @@ function stripProtocol(domainLike: string): string {
   return domainLike.replace(/^https?:\/\//i, '').replace(/\/$/, '');
 }
 
-function pickBestRedirect(urls: string[]): string[] {
-  // Amplify v6 expects arrays.
-  if (!urls.length) return [];
-  if (typeof window === 'undefined') return [urls[0]];
+function pickRedirectForThisOrigin(urls: string[]): string[] {
+  // Amplify v6 expects arrays
+  if (typeof window === 'undefined') return urls.slice(0, 1);
 
   const origin = window.location.origin;
   const match = urls.find(u => u.startsWith(origin));
-  return [match ?? urls[0]];
+  return match ? [match] : urls.slice(0, 1);
 }
 
 export function ensureAmplifyConfigured() {
@@ -34,16 +33,16 @@ export function ensureAmplifyConfigured() {
   const cfg: any = (awsExportsRaw as any)?.default ?? awsExportsRaw;
 
   const oauth = cfg?.oauth ?? {};
+
+  const redirectSignInAll = toStringArray(oauth.redirectSignIn);
+  const redirectSignOutAll = toStringArray(oauth.redirectSignOut);
+
+  const redirectSignIn = pickRedirectForThisOrigin(redirectSignInAll);
+  const redirectSignOut = pickRedirectForThisOrigin(redirectSignOutAll);
+
   const domain = stripProtocol(String(oauth.domain ?? ''));
 
-  const redirectInAll = toStringArray(oauth.redirectSignIn);
-  const redirectOutAll = toStringArray(oauth.redirectSignOut);
-
-  const redirectSignIn = pickBestRedirect(redirectInAll);
-  const redirectSignOut = pickBestRedirect(redirectOutAll);
-
-  // IMPORTANT: This is the Amplify v6 shape that signInWithRedirect() requires.
-  const amplifyV6Config: any = {
+  const amplifyV6Config = {
     Auth: {
       Cognito: {
         userPoolId: cfg.aws_user_pools_id,
@@ -62,8 +61,7 @@ export function ensureAmplifyConfigured() {
     },
   };
 
-  // Debug
-  // eslint-disable-next-line no-console
+  // IMPORTANT: this is what determines whether signInWithRedirect works
   console.log('[Amplify v6 oauth]:', amplifyV6Config.Auth.Cognito.loginWith.oauth);
 
   Amplify.configure(amplifyV6Config);

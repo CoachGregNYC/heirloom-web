@@ -17,9 +17,14 @@ export default function LoginPage() {
   }, [router]);
 
   const onSignIn = async () => {
+  try {
     ensureAmplifyConfigured();
     await signInWithRedirect();
-  };
+  } catch (e) {
+    console.error('[login] signInWithRedirect failed:', e);
+    alert(String((e as any)?.message ?? e));
+  }
+};
 
   return (
     <main style={{ padding: 32, fontFamily: 'system-ui' }}>
