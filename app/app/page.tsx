@@ -1,48 +1,54 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { getCurrentUser, signOut } from 'aws-amplify/auth';
+import { signInWithRedirect } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '../amplifyClient';
 
-export default function AppPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState<string | null>(null);
+export default function LoginPage() {
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    ensureAmplifyConfigured();
+    // Configure Amplify on mount (client only)
+    try {
+      ensureAmplifyConfigured();
+    } catch (e) {
+      console.error('[login] Amplify configure failed:', e);
+    }
+  }, []);
 
-    getCurrentUser()
-      .then((u: any) => {
-        const e =
-          u?.signInDetails?.loginId ||
-          u?.username ||
-          null;
-        setEmail(e);
-      })
-      .catch(() => router.replace('/login'));
-  }, [router]);
-
-  const onSignOut = async () => {
-    await signOut();
-    router.replace('/login');
-  };
+  async function onSignIn() {
+    setBusy(true);
+    try {
+      ensureAmplifyConfigured();
+      await signInWithRedirect();
+    } catch (e) {
+      console.error('[login] signInWithRedirect failed:', e);
+      alert(String((e as any)?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <main style={{ padding: 32, fontFamily: 'system-ui' }}>
-      <h1>Heirloom</h1>
+      <h1 style={{ marginBottom: 10 }}>Heirloom</h1>
+      <p style={{ marginTop: 0 }}>Preserve what matters. Private, secure, family-first.</p>
 
-      {email ? (
-        <>
-          <p>✅ Signed in as {email}</p>
-          <button onClick={onSignOut}>Sign out</button>
-          <hr style={{ margin: '24px 0' }} />
-          <h2>Family Filing Cabinet</h2>
-          <p>Authenticated area — next step is wiring S3 with Cognito Identity.</p>
-        </>
-      ) : (
-        <p>Loading...</p>
-      )}
+      <button
+        onClick={onSignIn}
+        disabled={busy}
+        style={{
+          marginTop: 24,
+          padding: '10px 14px',
+          borderRadius: 10,
+          border: '1px solid #111',
+          background: '#111',
+          color: '#fff',
+          cursor: busy ? 'not-allowed' : 'pointer',
+        }}
+      >
+        {busy ? 'Signing in…' : 'Sign in'}
+      </button>
     </main>
   );
 }
