@@ -48,21 +48,19 @@ export function ensureAmplifyConfigured() {
   const amplifyV6Config = {
     Auth: {
       Cognito: {
-        userPoolId: String(cfg.aws_user_pools_id ?? ''),
-        userPoolClientId: String(cfg.aws_user_pools_web_client_id ?? ''),
-        identityPoolId: cfg.aws_cognito_identity_pool_id
-          ? String(cfg.aws_cognito_identity_pool_id)
-          : undefined,
-        loginWith: {
-          oauth: {
-            domain,
-            scopes: scopes.length ? scopes : ['openid', 'email', 'profile'],
-            redirectSignIn,
-            redirectSignOut,
-            responseType, // "code"
-          },
-        },
-      },
+  userPoolId: String(cfg.aws_user_pools_id ?? ''),
+  userPoolClientId: String(cfg.aws_user_pools_web_client_id ?? ''),
+  identityPoolId: String(cfg.aws_cognito_identity_pool_id ?? ''),
+  loginWith: {
+    oauth: {
+      domain,
+      scopes: scopes.length ? scopes : ['openid', 'email', 'profile'],
+      redirectSignIn,
+      redirectSignOut,
+      responseType,
+    },
+  },
+},
     },
   } as const;
 
