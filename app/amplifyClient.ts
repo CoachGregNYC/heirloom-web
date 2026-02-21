@@ -42,7 +42,7 @@ export function ensureAmplifyConfigured() {
   const redirectSignOut = pickRedirectForThisOrigin(redirectSignOutAll);
 
   const scopes = toStringArray(oauth.scope);
-  const responseType = String(oauth.responseType ?? 'code');
+  const responseType: 'code' = 'code';
 
   // ✅ IMPORTANT: This is the Amplify v6 shape that signInWithRedirect requires.
   const amplifyV6Config = {
