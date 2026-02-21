@@ -19,11 +19,15 @@ function stripProtocol(domainLike: string): string {
 }
 
 function pickRedirectForThisOrigin(all: string[]): string[] {
-  // Amplify v6 expects string[]; we give it ONE best match for the current origin
   if (typeof window === 'undefined') return all.slice(0, 1);
   const origin = window.location.origin;
   const match = all.find((u) => u.startsWith(origin));
   return match ? [match] : all.slice(0, 1);
+}
+
+function env(name: string): string {
+  // Next exposes NEXT_PUBLIC_* at runtime in the client bundle
+  return (process.env as any)?.[name] ? String((process.env as any)[name]).trim() : '';
 }
 
 export function ensureAmplifyConfigured() {
@@ -31,7 +35,20 @@ export function ensureAmplifyConfigured() {
 
   const cfg: any = (awsExportsRaw as any)?.default ?? awsExportsRaw;
 
-  const oauth = cfg?.oauth ?? {};
+  // Prefer aws-exports.js oauth (local dev), but FALLBACK to env vars (Amplify Hosting safe)
+  const oauthFromExports = cfg?.oauth ?? {};
+  const oauthFromEnv = {
+    domain: env('NEXT_PUBLIC_COGNITO_DOMAIN'),
+    redirectSignIn: env('NEXT_PUBLIC_REDIRECT_SIGN_IN'),
+    redirectSignOut: env('NEXT_PUBLIC_REDIRECT_SIGN_OUT'),
+    scope: 'openid,email,profile',
+    responseType: 'code',
+  };
+
+  const oauth = {
+    ...oauthFromEnv,
+    ...oauthFromExports,
+  };
 
   const domain = stripProtocol(String(oauth.domain ?? ''));
 
@@ -44,44 +61,41 @@ export function ensureAmplifyConfigured() {
   const scopes = toStringArray(oauth.scope);
   const responseType: 'code' = 'code';
 
-  // ✅ IMPORTANT: This is the Amplify v6 shape that signInWithRedirect requires.
   const amplifyV6Config = {
     Auth: {
       Cognito: {
-  userPoolId: String(cfg.aws_user_pools_id ?? ''),
-  userPoolClientId: String(cfg.aws_user_pools_web_client_id ?? ''),
-  identityPoolId: String(cfg.aws_cognito_identity_pool_id ?? ''),
-  loginWith: {
-    oauth: {
-      domain,
-      scopes: scopes.length ? scopes : ['openid', 'email', 'profile'],
-      redirectSignIn,
-      redirectSignOut,
-      responseType,
-    },
-  },
-},
+        userPoolId: String(cfg.aws_user_pools_id ?? ''),
+        userPoolClientId: String(cfg.aws_user_pools_web_client_id ?? ''),
+        identityPoolId: cfg.aws_cognito_identity_pool_id
+          ? String(cfg.aws_cognito_identity_pool_id)
+          : undefined,
+        loginWith: {
+          oauth: {
+            domain,
+            scopes: scopes.length ? scopes : ['openid', 'email', 'profile'],
+            redirectSignIn,
+            redirectSignOut,
+            responseType,
+          },
+        },
+      },
     },
   } as const;
 
-  // Guardrails: fail fast with a readable error if anything is missing
+  // Don’t crash the whole app — log clearly and exit.
   if (!domain || !redirectSignIn.length || !redirectSignOut.length) {
-    // eslint-disable-next-line no-console
-    console.error('[Amplify] Invalid OAuth config', {
+    console.error('[Amplify] OAuth config missing required fields', {
       domain,
       redirectSignIn,
       redirectSignOut,
-      scopes,
-      responseType,
+      rawOauthFromExports: oauthFromExports,
+      rawOauthFromEnv: oauthFromEnv,
     });
-    throw new Error(
-      `Amplify OAuth config missing required fields: domain=${domain} redirectSignIn=${redirectSignIn} redirectSignOut=${redirectSignOut}`
-    );
+    return;
   }
 
   Amplify.configure(amplifyV6Config);
 
-  // eslint-disable-next-line no-console
   console.log('[Amplify v6 oauth]:', amplifyV6Config.Auth.Cognito.loginWith.oauth);
 
   configured = true;
