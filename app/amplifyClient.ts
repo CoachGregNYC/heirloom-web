@@ -7,24 +7,22 @@ let configured = false;
 
 function toStringArray(v: unknown): string[] {
   if (!v) return [];
-  if (Array.isArray(v)) return v.map(String).map(s => s.trim()).filter(Boolean);
-
-  const s = String(v).trim();
-  if (!s) return [];
-  return s.split(',').map(x => x.trim()).filter(Boolean);
+  if (Array.isArray(v)) return v.map(String).filter(Boolean);
+  return String(v)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function stripProtocol(domainLike: string): string {
   return domainLike.replace(/^https?:\/\//i, '').replace(/\/$/, '');
 }
 
-function pickRedirectForThisOrigin(urls: string[]): string[] {
-  // Amplify v6 expects arrays
-  if (typeof window === 'undefined') return urls.slice(0, 1);
-
+function pickRedirect(urls: string[]): string {
+  if (!urls.length) return '';
+  if (typeof window === 'undefined') return urls[0];
   const origin = window.location.origin;
-  const match = urls.find(u => u.startsWith(origin));
-  return match ? [match] : urls.slice(0, 1);
+  return urls.find((u) => u.startsWith(origin)) ?? urls[0];
 }
 
 export function ensureAmplifyConfigured() {
@@ -32,14 +30,10 @@ export function ensureAmplifyConfigured() {
 
   const cfg: any = (awsExportsRaw as any)?.default ?? awsExportsRaw;
 
-  const oauth = cfg?.oauth ?? {};
+  const oauth = cfg.oauth ?? {};
 
-  const redirectSignInAll = toStringArray(oauth.redirectSignIn);
-  const redirectSignOutAll = toStringArray(oauth.redirectSignOut);
-
-  const redirectSignIn = pickRedirectForThisOrigin(redirectSignInAll);
-  const redirectSignOut = pickRedirectForThisOrigin(redirectSignOutAll);
-
+  const redirectSignIn = pickRedirect(toStringArray(oauth.redirectSignIn));
+  const redirectSignOut = pickRedirect(toStringArray(oauth.redirectSignOut));
   const domain = stripProtocol(String(oauth.domain ?? ''));
 
   const amplifyV6Config = {
@@ -52,8 +46,8 @@ export function ensureAmplifyConfigured() {
           oauth: {
             domain,
             scopes: oauth.scope ?? ['openid', 'email', 'profile'],
-            redirectSignIn,
-            redirectSignOut,
+            redirectSignIn: [redirectSignIn],
+            redirectSignOut: [redirectSignOut],
             responseType: oauth.responseType ?? 'code',
           },
         },
@@ -61,10 +55,10 @@ export function ensureAmplifyConfigured() {
     },
   };
 
-  // IMPORTANT: this is what determines whether signInWithRedirect works
+  // Debug: you should see NON-empty values in prod console
+  // eslint-disable-next-line no-console
   console.log('[Amplify v6 oauth]:', amplifyV6Config.Auth.Cognito.loginWith.oauth);
 
   Amplify.configure(amplifyV6Config);
-
   configured = true;
 }
