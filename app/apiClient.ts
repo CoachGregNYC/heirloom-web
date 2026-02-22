@@ -1,12 +1,14 @@
 // app/apiClient.ts
 'use client';
 
+import { fetchAuthSession } from 'aws-amplify/auth';
+
 /**
  * Centralized API client for the Heirloom web app.
  *
- * - Uses NEXT_PUBLIC_API_BASE_URL from .env.local (and Amplify environment vars in prod)
+ * - Uses NEXT_PUBLIC_API_BASE_URL
  * - Automatically prepends the base URL for relative paths like "/items"
- * - Automatically attaches Authorization: Bearer <token> if present
+ * - Automatically attaches Authorization: Bearer <JWT> (ID token) from Amplify session
  */
 
 type ApiClientOptions = RequestInit & {
@@ -28,17 +30,25 @@ function isAbsoluteUrl(s: string): boolean {
 
 function buildUrl(input: string): string {
   if (isAbsoluteUrl(input)) return input;
-
   const base = getBaseUrl();
   const path = input.startsWith('/') ? input : `/${input}`;
   return `${base}${path}`;
 }
 
-function getAccessToken(): string | null {
-  // Your project has historically used these localStorage keys.
-  // If you later switch to Amplify-only tokens, we’ll update this.
+async function getJwtFromAmplify(): Promise<string | null> {
   try {
-    return localStorage.getItem('heirloom_access_token');
+    // fetchAuthSession reads the current logged-in session (cookies/storage managed by Amplify)
+    const session = await fetchAuthSession();
+
+    // For API Gateway JWT authorizers, ID token is typically the safest bet.
+    const idToken = session.tokens?.idToken?.toString();
+    if (idToken) return idToken;
+
+    // Fallback: access token (some setups validate this instead)
+    const accessToken = session.tokens?.accessToken?.toString();
+    if (accessToken) return accessToken;
+
+    return null;
   } catch {
     return null;
   }
@@ -48,19 +58,20 @@ export async function apiFetch(input: string, init: ApiClientOptions = {}) {
   const url = buildUrl(input);
 
   const headers = new Headers(init.headers ?? {});
-  // Default content type for JSON requests (don’t override if caller set it)
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
   if (!init.skipAuth) {
-    const token = getAccessToken();
-    if (token && !headers.has('Authorization')) {
+    const token = await getJwtFromAmplify();
+    if (!token) {
+      throw new Error('Not authenticated: no Cognito token available (fetchAuthSession returned none).');
+    }
+    if (!headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${token}`);
     }
   }
 
   const res = await fetch(url, { ...init, headers });
 
-  // parse response safely
   const text = await res.text();
   let data: any = null;
   try {
