@@ -2,29 +2,40 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithRedirect, getCurrentUser } from 'aws-amplify/auth';
+import { fetchAuthSession, signInWithRedirect } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '../amplifyClient';
 
 export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    ensureAmplifyConfigured();
+    (async () => {
+      try {
+        ensureAmplifyConfigured();
 
-    getCurrentUser()
-      .then(() => router.replace('/app'))
-      .catch(() => {});
+        // Only redirect if we truly have tokens (not just a cached "current user")
+        const session = await fetchAuthSession();
+        const hasTokens =
+          !!session?.tokens?.accessToken || !!session?.tokens?.idToken;
+
+        if (hasTokens) {
+          router.replace('/app');
+        }
+      } catch {
+        // Not signed in — stay on /login
+      }
+    })();
   }, [router]);
 
   const onSignIn = async () => {
-  try {
-    ensureAmplifyConfigured();
-    await signInWithRedirect();
-  } catch (e) {
-    console.error('[login] signInWithRedirect failed:', e);
-    alert(String((e as any)?.message ?? e));
-  }
-};
+    try {
+      ensureAmplifyConfigured();
+      await signInWithRedirect();
+    } catch (e) {
+      console.error('[login] signInWithRedirect failed:', e);
+      alert(String((e as any)?.message ?? e));
+    }
+  };
 
   return (
     <main style={{ padding: 32, fontFamily: 'system-ui' }}>
