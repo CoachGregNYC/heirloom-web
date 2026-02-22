@@ -2,6 +2,7 @@
 
 import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
+import awsExportsRaw from '../aws-exports';
 
 let configured = false;
 
@@ -9,51 +10,64 @@ function stripProtocol(domainLike: string): string {
   return domainLike.replace(/^https?:\/\//i, '').replace(/\/$/, '');
 }
 
-function toStringArray(v: unknown): string[] {
-  if (!v) return [];
-  if (Array.isArray(v)) return v.map(String).map((x) => x.trim()).filter(Boolean);
+function pickRedirectForThisOrigin(csv: string): string[] {
+  const all = (csv || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
 
-  const s = String(v).trim();
-  if (!s) return [];
-  return s.split(',').map((x) => x.trim()).filter(Boolean);
-}
+  if (!all.length) return [];
 
-function pickRedirectForThisOrigin(all: string[]): string[] {
-  // Amplify v6 expects string[]; we pass ONE best match for the current origin
-  if (typeof window === 'undefined') return all.slice(0, 1);
+  if (typeof window === 'undefined') return [all[0]];
+
   const origin = window.location.origin;
   const match = all.find((u) => u.startsWith(origin));
-  return match ? [match] : all.slice(0, 1);
+  return [match ?? all[0]];
 }
 
 export function ensureAmplifyConfigured() {
   if (configured) return;
 
-  const domain = stripProtocol(process.env.NEXT_PUBLIC_COGNITO_DOMAIN || '');
+  const cfg: any = (awsExportsRaw as any)?.default ?? awsExportsRaw;
 
-  const redirectSignInAll = toStringArray(process.env.NEXT_PUBLIC_REDIRECT_SIGN_IN);
-  const redirectSignOutAll = toStringArray(process.env.NEXT_PUBLIC_REDIRECT_SIGN_OUT);
+  // ---- ENV (authoritative for hosted UI redirects/domain/client) ----
+  const domainEnv = process.env.NEXT_PUBLIC_COGNITO_DOMAIN || '';
+  const redirectInEnv = process.env.NEXT_PUBLIC_REDIRECT_SIGN_IN || '';
+  const redirectOutEnv = process.env.NEXT_PUBLIC_REDIRECT_SIGN_OUT || '';
 
-  const redirectSignIn = pickRedirectForThisOrigin(redirectSignInAll);
-  const redirectSignOut = pickRedirectForThisOrigin(redirectSignOutAll);
+  const domain = stripProtocol(domainEnv);
+  const redirectSignIn = pickRedirectForThisOrigin(redirectInEnv);
+  const redirectSignOut = pickRedirectForThisOrigin(redirectOutEnv);
 
   const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID || '';
   const clientId = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID || '';
 
+  // ---- From aws-exports (for AWS credentials + S3) ----
+  const identityPoolId = cfg.aws_cognito_identity_pool_id
+    ? String(cfg.aws_cognito_identity_pool_id)
+    : undefined;
+
+  const bucket = String(cfg.aws_user_files_s3_bucket ?? '');
+  const region = String(cfg.aws_user_files_s3_bucket_region ?? cfg.aws_project_region ?? 'us-east-1');
+
   const scopes = ['openid', 'email', 'profile'];
   const responseType = 'code' as const;
 
-  if (!domain || !userPoolId || !clientId || !redirectSignIn.length || !redirectSignOut.length) {
-    console.error('OAuth ENV CONFIG MISSING', {
-      domain,
-      userPoolId,
-      clientId,
-      redirectSignInAll,
-      redirectSignOutAll,
-      redirectSignIn,
-      redirectSignOut,
-    });
+  if (!domain || !redirectSignIn.length || !redirectSignOut.length) {
+    console.error('OAuth ENV CONFIG MISSING', { domain, redirectSignIn, redirectSignOut });
     throw new Error('OAuth configuration missing required fields');
+  }
+  if (!userPoolId || !clientId) {
+    console.error('UserPool ENV CONFIG MISSING', { userPoolId, clientId });
+    throw new Error('UserPool configuration missing required fields');
+  }
+  if (!identityPoolId) {
+    console.error('Identity Pool missing in aws-exports.js', { identityPoolId });
+    throw new Error('Identity Pool configuration missing (required for S3 protected access)');
+  }
+  if (!bucket || !region) {
+    console.error('S3 config missing in aws-exports.js', { bucket, region });
+    throw new Error('S3 configuration missing');
   }
 
   Amplify.configure({
@@ -61,6 +75,7 @@ export function ensureAmplifyConfigured() {
       Cognito: {
         userPoolId,
         userPoolClientId: clientId,
+        identityPoolId,
         loginWith: {
           oauth: {
             domain,
@@ -72,9 +87,25 @@ export function ensureAmplifyConfigured() {
         },
       },
     },
+    Storage: {
+      S3: {
+        bucket,
+        region,
+      },
+    },
   });
 
-  console.log('[Amplify configured]', { domain, redirectSignIn, redirectSignOut });
+  // Helpful debug
+  console.log('[Amplify configured]', {
+    domain,
+    redirectSignIn,
+    redirectSignOut,
+    userPoolId,
+    clientId,
+    identityPoolId,
+    bucket,
+    region,
+  });
 
   configured = true;
 }
