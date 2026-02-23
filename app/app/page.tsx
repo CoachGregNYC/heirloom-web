@@ -1,3 +1,4 @@
+// app/app/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -26,7 +27,6 @@ export default function AppHome() {
   const [error, setError] = useState<string>('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [selected, setSelected] = useState<PhotoItem | null>(null);
-  const [creating, setCreating] = useState(false);
 
   async function loadPhotos() {
     setError('');
@@ -45,29 +45,17 @@ export default function AppHome() {
   }
 
   async function onCreateHeirloom() {
-    if (!selected) return;
-    setCreating(true);
-    setError('');
-    try {
-      ensureAmplifyConfigured();
+  if (!selected) return;
 
-      const payload = {
-        photoKey: selected.key,
-        title: selected.filename ?? selected.key.split('/').pop() ?? 'Untitled',
-      };
+  // Route to the Create page with the selected photo info in the URL
+  const qs = new URLSearchParams({
+    photoKey: selected.key,
+    photoUrl: selected.url ?? '',
+    filename: selected.filename ?? selected.key.split('/').pop() ?? '',
+  });
 
-      await apiFetch(`/families/${familyId}/heirlooms`, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-
-      alert('Heirloom created ✅');
-    } catch (e: any) {
-      setError(String(e?.message ?? e));
-    } finally {
-      setCreating(false);
-    }
-  }
+  router.push(`/app/heirlooms/create?${qs.toString()}`);
+}
 
   async function onSignOut() {
     try {
@@ -87,6 +75,20 @@ export default function AppHome() {
     <main style={{ padding: 24, fontFamily: 'system-ui' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h1 style={{ margin: 0 }}>Heirloom</h1>
+
+        <button
+          onClick={() => router.push('/app/heirlooms')}
+          style={{
+            padding: '8px 12px',
+            borderRadius: 10,
+            border: '1px solid #999',
+            background: '#fff',
+            cursor: 'pointer',
+          }}
+        >
+          Heirlooms →
+        </button>
+
         <button
           onClick={onSignOut}
           style={{
@@ -111,7 +113,7 @@ export default function AppHome() {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
+      <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           onClick={loadPhotos}
           disabled={loading}
@@ -130,7 +132,7 @@ export default function AppHome() {
 
         <button
           onClick={onCreateHeirloom}
-          disabled={!selected || creating}
+          disabled={!selected}
           style={{
             padding: '10px 14px',
             borderRadius: 10,
@@ -138,10 +140,9 @@ export default function AppHome() {
             background: selected ? '#0a7' : '#ddd',
             color: selected ? '#fff' : '#666',
             cursor: selected ? 'pointer' : 'not-allowed',
-            opacity: creating ? 0.6 : 1,
           }}
         >
-          {creating ? 'Creating…' : 'Create Heirloom from Selected Photo'}
+          Create Heirloom from Selected Photo
         </button>
 
         <div style={{ color: '#666', fontSize: 14 }}>
@@ -160,6 +161,8 @@ export default function AppHome() {
         {photos.map((p) => {
           const isSelected = selected?.key === p.key;
           const thumb = p.url;
+          const label = p.filename ?? p.key.split('/').pop() ?? p.key;
+
           return (
             <button
               key={p.key}
@@ -187,19 +190,25 @@ export default function AppHome() {
               >
                 {thumb ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={thumb} alt={p.filename ?? p.key} style={{ width: '100%' }} />
+                  <img
+                    src={thumb}
+                    alt={label}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
                 ) : (
                   <span style={{ color: '#888', fontSize: 12 }}>No preview</span>
                 )}
               </div>
 
-              <div style={{ marginTop: 8, fontSize: 12, color: '#333' }}>
-                {p.filename ?? p.key.split('/').pop() ?? p.key}
-              </div>
+              <div style={{ marginTop: 8, fontSize: 12, color: '#333' }}>{label}</div>
             </button>
           );
         })}
       </div>
+
+      {!loading && photos.length === 0 ? (
+        <div style={{ marginTop: 18, color: '#666' }}>No photos found.</div>
+      ) : null}
     </main>
   );
 }
