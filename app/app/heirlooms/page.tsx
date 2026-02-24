@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
-import { getFamilyId } from '@/app/family';
 
 type HeirloomItem = {
   familyId: string;
@@ -25,18 +24,17 @@ type HeirloomItem = {
   createdBy?: string;
 };
 
-function formatDate(iso?: string) {
+function formatDate(iso?: string): string {
   if (!iso) return '';
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
+  if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleString();
 }
 
 export default function HeirloomsPage() {
   const router = useRouter();
 
-  // ✅ Critical fix: use the same family resolver as the rest of the app
-  const familyId = useMemo(() => getFamilyId(), []);
+  const familyId = useMemo(() => process.env.NEXT_PUBLIC_FAMILY_ID || '', []);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -51,24 +49,43 @@ export default function HeirloomsPage() {
       ensureAmplifyConfigured();
 
       if (!familyId) {
-        throw new Error('Missing familyId. getFamilyId() returned empty.');
+        throw new Error(
+          'Missing NEXT_PUBLIC_FAMILY_ID. Add it to .env.local and Amplify environment variables.'
+        );
       }
 
       const data = await apiFetch(`/families/${familyId}/heirlooms`, { method: 'GET' });
       const list: HeirloomItem[] = Array.isArray(data) ? data : data?.items ?? [];
-
-      // ✅ Sort newest first (so you immediately see the one you just created)
-      list.sort((a, b) => {
-        const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
-        const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
-        return tb - ta;
-      });
-
       setItems(list);
     } catch (e: any) {
       setError(String(e?.message ?? e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onDeleteHeirloom(h: HeirloomItem) {
+    const ok = window.confirm(`Delete heirloom "${h.title || 'Untitled'}"? This cannot be undone.`);
+    if (!ok) return;
+
+    setDeletingId(h.heirloomId);
+    setError('');
+
+    try {
+      ensureAmplifyConfigured();
+
+      // Assumes API route exists:
+      // DELETE /families/{familyId}/heirlooms/{heirloomId}
+      await apiFetch(`/families/${familyId}/heirlooms/${h.heirloomId}`, {
+        method: 'DELETE',
+      });
+
+      // Optimistic remove
+      setItems((prev) => prev.filter((x) => x.heirloomId !== h.heirloomId));
+    } catch (e: any) {
+      setError(String(e?.message ?? e));
+    } finally {
+      setDeletingId('');
     }
   }
 
@@ -78,29 +95,6 @@ export default function HeirloomsPage() {
       await signOut();
     } finally {
       router.replace('/login');
-    }
-  }
-
-  async function onDeleteHeirloom(h: HeirloomItem) {
-    const ok = confirm(`Delete "${h.title || 'Untitled'}"? This cannot be undone.`);
-    if (!ok) return;
-
-    setDeletingId(h.heirloomId);
-    setError('');
-
-    try {
-      ensureAmplifyConfigured();
-
-      await apiFetch(`/families/${familyId}/heirlooms/${h.heirloomId}`, {
-        method: 'DELETE',
-      });
-
-      // Optimistic UI update
-      setItems((prev) => prev.filter((x) => x.heirloomId !== h.heirloomId));
-    } catch (e: any) {
-      setError(String(e?.message ?? e));
-    } finally {
-      setDeletingId('');
     }
   }
 
@@ -182,111 +176,117 @@ export default function HeirloomsPage() {
         }}
       >
         {items.map((h) => {
-  const title = h.title || 'Untitled';
-  const subtitleBits = [h.room, h.holiday].filter(Boolean);
-  const subtitle = subtitleBits.join(' · ');
-  const created = formatDate(h.createdAt);
+          const title = h.title || 'Untitled';
+          const subtitleBits = [h.room, h.holiday].filter(Boolean);
+          const subtitle = subtitleBits.join(' · ');
+          const created = formatDate(h.createdAt);
 
-  return (
-    <div
-      key={`${h.familyId}:${h.heirloomId}`}
-      role="button"
-      tabIndex={0}
-      onClick={() => router.push(`/app/heirlooms/${h.heirloomId}`)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          router.push(`/app/heirlooms/${h.heirloomId}`);
-        }
-      }}
-      style={{
-        textAlign: 'left',
-        borderRadius: 14,
-        border: '1px solid #ddd',
-        background: '#fff',
-        padding: 12,
-        cursor: 'pointer',
-        outline: 'none',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          height: 140,
-          borderRadius: 10,
-          background: '#f3f3f3',
-          overflow: 'hidden',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative',
-        }}
-      >
-        {h.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={h.photoUrl}
-            alt={title}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        ) : (
-          <span style={{ color: '#888', fontSize: 12 }}>No preview</span>
-        )}
-
-        {/* Admin delete button */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDeleteHeirloom(h);
-          }}
-          disabled={deletingId === h.heirloomId}
-          title="Delete"
-          style={{
-            position: 'absolute',
-            top: 8,
-            right: 8,
-            padding: '6px 10px',
-            borderRadius: 10,
-            border: '1px solid #ddd',
-            background: '#fff',
-            cursor: deletingId === h.heirloomId ? 'not-allowed' : 'pointer',
-            opacity: deletingId === h.heirloomId ? 0.6 : 1,
-            fontSize: 12,
-          }}
-        >
-          {deletingId === h.heirloomId ? 'Deleting…' : 'Delete'}
-        </button>
-      </div>
-
-      <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: '#111' }}>{title}</div>
-
-      {subtitle ? <div style={{ marginTop: 4, fontSize: 12, color: '#555' }}>{subtitle}</div> : null}
-
-      {created ? (
-        <div style={{ marginTop: 6, fontSize: 11, color: '#777' }}>Created: {created}</div>
-      ) : null}
-
-      {h.tags?.length ? (
-        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {h.tags.slice(0, 6).map((t) => (
-            <span
-              key={t}
+          return (
+            <button
+              key={`${h.familyId}:${h.heirloomId}`}
+              type="button"
+              onClick={() => router.push(`/app/heirlooms/${h.heirloomId}`)}
               style={{
-                fontSize: 11,
-                padding: '3px 8px',
-                borderRadius: 999,
-                background: '#f2f2f2',
-                color: '#333',
-                border: '1px solid #e6e6e6',
+                textAlign: 'left',
+                borderRadius: 14,
+                border: '1px solid #ddd',
+                background: '#fff',
+                padding: 12,
+                cursor: 'pointer',
               }}
             >
-              {t}
-            </span>
-          ))}
-        </div>
-      ) : null}
-    </div>
+              <div
+                style={{
+                  width: '100%',
+                  height: 140,
+                  borderRadius: 10,
+                  background: '#f3f3f3',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                }}
+              >
+                {h.photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={h.photoUrl}
+                    alt={title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <span style={{ color: '#888', fontSize: 12 }}>No preview</span>
+                )}
+
+                {/* Admin delete button (does NOT navigate) */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDeleteHeirloom(h);
+                  }}
+                  disabled={deletingId === h.heirloomId}
+                  title="Delete"
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    padding: '6px 10px',
+                    borderRadius: 10,
+                    border: '1px solid #ddd',
+                    background: '#fff',
+                    cursor: deletingId === h.heirloomId ? 'not-allowed' : 'pointer',
+                    opacity: deletingId === h.heirloomId ? 0.6 : 1,
+                    fontSize: 12,
+                  }}
+                >
+                  {deletingId === h.heirloomId ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+
+              <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: '#111' }}>
+                {title}
+              </div>
+
+              {subtitle ? (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#555' }}>{subtitle}</div>
+              ) : null}
+
+              {created ? (
+                <div style={{ marginTop: 6, fontSize: 11, color: '#777' }}>Created: {created}</div>
+              ) : null}
+
+              {h.description ? (
+                <div style={{ marginTop: 8, fontSize: 12, color: '#333', lineHeight: 1.35 }}>
+                  {h.description}
+                </div>
+              ) : null}
+
+              {h.tags?.length ? (
+                <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {h.tags.slice(0, 6).map((t) => (
+                    <span
+                      key={t}
+                      style={{
+                        fontSize: 11,
+                        padding: '3px 8px',
+                        borderRadius: 999,
+                        background: '#f2f2f2',
+                        color: '#333',
+                        border: '1px solid #e6e6e6',
+                      }}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </main>
   );
-})}
+}
