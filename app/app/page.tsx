@@ -45,21 +45,25 @@ export default function AppHome() {
   }
 
   async function onCreateHeirloom() {
-  if (!selected) return;
+    if (!selected) return;
 
-  // ✅ Persist photoKey in sessionStorage so Create page can recover it
-  if (typeof window !== 'undefined') {
-    window.sessionStorage.setItem('heirloom_selected_photoKey', selected.key);
+    const filename = selected.filename ?? selected.key.split('/').pop() ?? '';
+    const photoUrl = selected.url ?? '';
+
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('heirloom_selected_photoKey', selected.key);
+      window.sessionStorage.setItem('heirloom_selected_photoUrl', photoUrl);
+      window.sessionStorage.setItem('heirloom_selected_filename', filename);
+    }
+
+    const qs = new URLSearchParams({
+      photoKey: selected.key,
+      photoUrl,
+      filename,
+    });
+
+    router.push(`/app/heirlooms/create?${qs.toString()}`);
   }
-
-  const qs = new URLSearchParams({
-    photoKey: selected.key,
-    photoUrl: selected.url ?? '',
-    filename: selected.filename ?? selected.key.split('/').pop() ?? '',
-  });
-
-  router.push(`/app/heirlooms/create?${qs.toString()}`);
-}
 
   async function onSignOut() {
     try {
@@ -193,7 +197,6 @@ export default function AppHome() {
                 }}
               >
                 {thumb ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={thumb}
                     alt={label}
