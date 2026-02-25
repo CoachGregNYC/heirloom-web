@@ -47,7 +47,11 @@ export default function AppHome() {
   async function onCreateHeirloom() {
   if (!selected) return;
 
-  // Route to the Create page with the selected photo info in the URL
+  // ✅ Persist photoKey in sessionStorage so Create page can recover it
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.setItem('heirloom_selected_photoKey', selected.key);
+  }
+
   const qs = new URLSearchParams({
     photoKey: selected.key,
     photoUrl: selected.url ?? '',
