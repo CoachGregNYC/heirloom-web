@@ -1,8 +1,7 @@
-// app/app/heirlooms/create/createHeirloomClient.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
@@ -21,19 +20,24 @@ const HOLIDAY_OPTIONS = [
 ];
 const TAG_OPTIONS = ['Photo', 'Document', 'Jewelry', 'Furniture', 'Artwork', 'Military', 'Travel', 'Recipe', 'Letter'];
 
+function filenameFromKey(key: string) {
+  if (!key) return '';
+  const parts = key.split('/');
+  return parts[parts.length - 1] || '';
+}
+
 export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhotoKey: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const familyId = useMemo(() => getFamilyId(), []);
 
-  // Keep photoKey stable and explicit (and show a clear error if missing)
-  const [photoKey] = useState<string>(initialPhotoKey || '');
+  // IMPORTANT: photoKey must be mutable so we can hydrate it after mount
+  const [photoKey, setPhotoKey] = useState<string>(initialPhotoKey || '');
+  const [photoUrl, setPhotoUrl] = useState<string>('');
+  const [filename, setFilename] = useState<string>(() => filenameFromKey(initialPhotoKey || ''));
 
-  const [title, setTitle] = useState<string>(() => {
-    if (!initialPhotoKey) return '';
-    const parts = initialPhotoKey.split('/');
-    return parts[parts.length - 1] || '';
-  });
+  const [title, setTitle] = useState<string>(() => filenameFromKey(initialPhotoKey || ''));
   const [description, setDescription] = useState<string>('');
   const [room, setRoom] = useState<string>(ROOM_OPTIONS[0]);
   const [holiday, setHoliday] = useState<string>('None');
@@ -42,12 +46,39 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>('');
 
-  // If we ever land here without a photoKey, fail fast (prevents “mystery” submits)
+  // Hydrate from:
+  // 1) query params (if present)
+  // 2) sessionStorage fallback (most reliable across nav)
   useEffect(() => {
-    if (!photoKey) {
-      setError('Missing photoKey. Go back to Photos and select a photo again.');
+    const qpKey = searchParams?.get('photoKey') || '';
+    const qpUrl = searchParams?.get('photoUrl') || '';
+    const qpFilename = searchParams?.get('filename') || '';
+
+    // Prefer query params if they exist
+    if (qpKey) {
+      setPhotoKey(qpKey);
+      setPhotoUrl(qpUrl);
+      const f = qpFilename || filenameFromKey(qpKey);
+      setFilename(f);
+      setTitle((prev) => (prev?.trim() ? prev : f));
+      return;
     }
-  }, [photoKey]);
+
+    // Otherwise pull from sessionStorage
+    if (typeof window !== 'undefined') {
+      const ssKey = window.sessionStorage.getItem('heirloom_selected_photoKey') || '';
+      const ssUrl = window.sessionStorage.getItem('heirloom_selected_photoUrl') || '';
+      const ssFilename = window.sessionStorage.getItem('heirloom_selected_filename') || '';
+
+      if (ssKey) {
+        setPhotoKey(ssKey);
+        setPhotoUrl(ssUrl);
+        const f = ssFilename || filenameFromKey(ssKey);
+        setFilename(f);
+        setTitle((prev) => (prev?.trim() ? prev : f));
+      }
+    }
+  }, [searchParams]);
 
   function toggleTag(t: string) {
     setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
@@ -78,6 +109,13 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
         body: JSON.stringify(payload),
       });
 
+      // Optional: clean up the "selected photo" now that we used it
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem('heirloom_selected_photoKey');
+        window.sessionStorage.removeItem('heirloom_selected_photoUrl');
+        window.sessionStorage.removeItem('heirloom_selected_filename');
+      }
+
       router.replace('/app/heirlooms');
     } catch (e: any) {
       setError(String(e?.message ?? e));
@@ -96,12 +134,11 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 860, margin: '0 auto' }}>
+    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 980, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h1 style={{ margin: 0 }}>Heirloom</h1>
 
         <button
-          type="button"
           onClick={() => router.push('/app')}
           style={{
             padding: '8px 12px',
@@ -115,7 +152,6 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
         </button>
 
         <button
-          type="button"
           onClick={() => router.push('/app/heirlooms')}
           style={{
             padding: '8px 12px',
@@ -129,7 +165,6 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
         </button>
 
         <button
-          type="button"
           onClick={onSignOut}
           style={{
             marginLeft: 'auto',
@@ -153,28 +188,49 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
         </div>
       ) : null}
 
-      {/* Wrap inputs in a real <form> and control submission explicitly.
-          This prevents “random” page navigations and keeps photoKey stable. */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onCreate();
-        }}
+      <div
         style={{
           marginTop: 16,
           border: '1px solid #e6e6e6',
           borderRadius: 14,
           padding: 16,
           background: '#fff',
+          display: 'grid',
+          gridTemplateColumns: '240px 1fr',
+          gap: 16,
+          alignItems: 'start',
         }}
       >
-        <div style={{ fontSize: 12, color: '#666' }}>Selected photoKey</div>
-        <div style={{ marginTop: 4, fontSize: 12, color: '#111', wordBreak: 'break-all' }}>
-          {photoKey || '(missing)'}
+        {/* Left: preview */}
+        <div style={{ border: '1px solid #eee', borderRadius: 14, padding: 12 }}>
+          <div
+            style={{
+              width: '100%',
+              height: 220,
+              borderRadius: 12,
+              background: '#f3f3f3',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={photoUrl} alt={title || filename || 'Selected photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ color: '#888', fontSize: 12 }}>No preview URL</span>
+            )}
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 12, color: '#666' }}>Selected photoKey</div>
+          <div style={{ marginTop: 4, fontSize: 12, color: '#111', wordBreak: 'break-all' }}>
+            {photoKey || '(missing)'}
+          </div>
         </div>
 
-        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+        {/* Right: form */}
+        <div style={{ display: 'grid', gap: 12 }}>
           <label style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: 12, color: '#444' }}>Title *</span>
             <input
@@ -260,12 +316,7 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
                   <button
                     key={t}
                     type="button"
-                    onClick={(e) => {
-                      // Double safety: even though type="button", stop any bubbling.
-                      e.preventDefault();
-                      e.stopPropagation();
-                      toggleTag(t);
-                    }}
+                    onClick={() => toggleTag(t)}
                     style={{
                       padding: '6px 10px',
                       borderRadius: 999,
@@ -285,7 +336,7 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
 
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
             <button
-              type="submit"
+              onClick={onCreate}
               disabled={saving}
               style={{
                 padding: '10px 14px',
@@ -315,7 +366,7 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
             </button>
           </div>
         </div>
-      </form>
+      </div>
     </main>
   );
 }
