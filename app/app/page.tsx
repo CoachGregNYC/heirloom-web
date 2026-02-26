@@ -45,25 +45,24 @@ export default function AppHome() {
   }
 
   async function onCreateHeirloom() {
-    if (!selected) return;
+  if (!selected) return;
 
-    const filename = selected.filename ?? selected.key.split('/').pop() ?? '';
-    const photoUrl = selected.url ?? '';
+  const filename = selected.filename ?? selected.key.split('/').pop() ?? '';
+  const photoUrl = selected.url ?? '';
 
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem('heirloom_selected_photoKey', selected.key);
-      window.sessionStorage.setItem('heirloom_selected_photoUrl', photoUrl);
-      window.sessionStorage.setItem('heirloom_selected_filename', filename);
-    }
+  if (typeof window !== 'undefined') {
+    // Write first
+    window.sessionStorage.setItem('heirloom_selected_photoKey', selected.key);
+    window.sessionStorage.setItem('heirloom_selected_photoUrl', photoUrl);
+    window.sessionStorage.setItem('heirloom_selected_filename', filename);
 
-    const qs = new URLSearchParams({
-      photoKey: selected.key,
-      photoUrl,
-      filename,
-    });
-
-    router.push(`/app/heirlooms/create?${qs.toString()}`);
+    // IMPORTANT: force flush before navigation
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
+
+  // Remove query params entirely (we don't need them anymore)
+  router.push('/app/heirlooms/create');
+}
 
   async function onSignOut() {
     try {
