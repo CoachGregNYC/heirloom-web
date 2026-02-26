@@ -185,7 +185,7 @@ export default function HeirloomsPage() {
             <button
               key={`${h.familyId}:${h.heirloomId}`}
               type="button"
-              onClick={() => router.push(`/app/heirlooms/${h.heirloomId}`)}
+              onClick={() => router.push(`/app/${h.heirloomId}`)}
               style={{
                 textAlign: 'left',
                 borderRadius: 14,
