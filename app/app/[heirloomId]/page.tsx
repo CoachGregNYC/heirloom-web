@@ -1,4 +1,3 @@
-// app/app/[heirloomId]/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -26,10 +25,10 @@ type HeirloomItem = {
   createdBy?: string;
 };
 
-function formatDate(iso?: string) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
+function formatDate(input?: string) {
+  if (!input) return '';
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return input;
   return d.toLocaleString();
 }
 
@@ -38,15 +37,13 @@ export default function HeirloomDetailPage() {
   const params = useParams<{ heirloomId: string }>();
 
   const familyId = useMemo(() => getFamilyId(), []);
-  const heirloomId = params?.heirloomId ?? '';
+  const heirloomId = params?.heirloomId || '';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [item, setItem] = useState<HeirloomItem | null>(null);
 
-  const [deleting, setDeleting] = useState(false);
-
-  async function loadHeirloom() {
+  async function load() {
     setError('');
     setLoading(true);
 
@@ -56,9 +53,19 @@ export default function HeirloomDetailPage() {
       if (!familyId) throw new Error('Missing familyId (getFamilyId() returned empty).');
       if (!heirloomId) throw new Error('Missing heirloomId in route.');
 
-      // Expect GET /families/:familyId/heirlooms/:heirloomId
-      const data = await apiFetch(`/families/${familyId}/heirlooms/${heirloomId}`, { method: 'GET' });
-      setItem(data as HeirloomItem);
+      // ✅ Backend currently has a reliable LIST endpoint.
+      // We fetch the list and find the specific item client-side.
+      const data = await apiFetch(`/families/${familyId}/heirlooms`, { method: 'GET' });
+      const items: HeirloomItem[] = Array.isArray(data) ? data : data?.items ?? [];
+
+      const found =
+        items.find((h) => h.heirloomId === heirloomId) ||
+        items.find((h) => String(h.heirloomId) === String(heirloomId));
+
+      setItem(found ?? null);
+      if (!found) {
+        setError('Not found.');
+      }
     } catch (e: any) {
       setError(String(e?.message ?? e));
       setItem(null);
@@ -69,29 +76,19 @@ export default function HeirloomDetailPage() {
 
   async function onDelete() {
     if (!item) return;
-
-    const ok = window.confirm(`Delete "${item.title ?? 'Untitled'}"? This cannot be undone.`);
+    const ok = window.confirm(`Delete heirloom "${item.title || 'Untitled'}"? This cannot be undone.`);
     if (!ok) return;
 
-    setDeleting(true);
     setError('');
-
     try {
       ensureAmplifyConfigured();
 
-      if (!familyId) throw new Error('Missing familyId (getFamilyId() returned empty).');
-      if (!heirloomId) throw new Error('Missing heirloomId in route.');
-
-      // Expect DELETE /families/:familyId/heirlooms/:heirloomId
-      await apiFetch(`/families/${familyId}/heirlooms/${heirloomId}`, {
-        method: 'DELETE',
-      });
+      // This will only work once your API Gateway DELETE route is deployed to the stage.
+      await apiFetch(`/families/${familyId}/heirlooms/${item.heirloomId}`, { method: 'DELETE' });
 
       router.replace('/app/heirlooms');
     } catch (e: any) {
       setError(String(e?.message ?? e));
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -105,24 +102,21 @@ export default function HeirloomDetailPage() {
   }
 
   useEffect(() => {
-    loadHeirloom();
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heirloomId]);
 
-  const title = item?.title ?? 'Untitled';
+  const title = item?.title || 'Untitled';
   const created = formatDate(item?.createdAt);
-  const subtitleBits = [item?.room, item?.holiday].filter(Boolean) as string[];
-  const subtitle = subtitleBits.join(' · ');
 
   return (
-    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 920, margin: '0 auto' }}>
+    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 980, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h1 style={{ margin: 0 }}>Heirloom</h1>
 
         <button
           onClick={() => router.push('/app/heirlooms')}
           style={{
-            marginLeft: 8,
             padding: '8px 12px',
             borderRadius: 10,
             border: '1px solid #999',
@@ -157,136 +151,115 @@ export default function HeirloomDetailPage() {
         </div>
       ) : null}
 
-      <div
-        style={{
-          marginTop: 14,
-          border: '1px solid #e6e6e6',
-          borderRadius: 14,
-          padding: 16,
-          background: '#fff',
-        }}
-      >
-        {loading ? (
-          <div style={{ color: '#666' }}>Loading…</div>
-        ) : !item ? (
-          <div style={{ color: '#666' }}>Not found.</div>
-        ) : (
-          <>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div
-                style={{
-                  width: 360,
-                  maxWidth: '100%',
-                  height: 260,
-                  borderRadius: 12,
-                  background: '#f3f3f3',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {item.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.photoUrl}
-                    alt={title}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <span style={{ color: '#888', fontSize: 12 }}>No photo</span>
-                )}
+      {loading ? (
+        <div style={{ marginTop: 16, color: '#666' }}>Loading…</div>
+      ) : item ? (
+        <div
+          style={{
+            marginTop: 16,
+            border: '1px solid #e6e6e6',
+            borderRadius: 14,
+            padding: 16,
+            background: '#fff',
+          }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
+            <div
+              style={{
+                width: '100%',
+                height: 320,
+                borderRadius: 12,
+                background: '#f3f3f3',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {item.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={item.photoUrl}
+                  alt={title}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                <span style={{ color: '#888', fontSize: 12 }}>No preview</span>
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#111' }}>{title}</div>
+
+              {item.description ? (
+                <div style={{ marginTop: 10, color: '#333', lineHeight: 1.45 }}>{item.description}</div>
+              ) : (
+                <div style={{ marginTop: 10, color: '#777' }}>(No description)</div>
+              )}
+
+              <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 10, color: '#555' }}>
+                {item.room ? <span>Room: {item.room}</span> : null}
+                {item.holiday ? <span>Holiday: {item.holiday}</span> : null}
+                {created ? <span>Created: {created}</span> : null}
               </div>
 
-              <div style={{ flex: 1, minWidth: 260 }}>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#111' }}>{title}</div>
-
-                {subtitle ? (
-                  <div style={{ marginTop: 6, fontSize: 13, color: '#555' }}>{subtitle}</div>
-                ) : null}
-
-                {created ? (
-                  <div style={{ marginTop: 8, fontSize: 12, color: '#777' }}>Created: {created}</div>
-                ) : null}
-
-                {item.description ? (
-                  <div style={{ marginTop: 12, fontSize: 14, color: '#222', lineHeight: 1.45 }}>
-                    {item.description}
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 12, fontSize: 13, color: '#777' }}>
-                    No description yet.
-                  </div>
-                )}
-
-                {item.tags?.length ? (
-                  <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {item.tags.map((t) => (
-                      <span
-                        key={t}
-                        style={{
-                          fontSize: 12,
-                          padding: '4px 10px',
-                          borderRadius: 999,
-                          background: '#f2f2f2',
-                          color: '#333',
-                          border: '1px solid #e6e6e6',
-                        }}
-                      >
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button
-                    onClick={loadHeirloom}
-                    disabled={loading}
-                    style={{
-                      padding: '10px 14px',
-                      borderRadius: 10,
-                      border: '1px solid #111',
-                      background: '#111',
-                      color: '#fff',
-                      cursor: loading ? 'not-allowed' : 'pointer',
-                      opacity: loading ? 0.6 : 1,
-                    }}
-                  >
-                    Refresh
-                  </button>
-
-                  <button
-                    onClick={onDelete}
-                    disabled={deleting}
-                    style={{
-                      padding: '10px 14px',
-                      borderRadius: 10,
-                      border: '1px solid #d33',
-                      background: deleting ? '#eee' : '#fff',
-                      color: deleting ? '#888' : '#d33',
-                      cursor: deleting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {deleting ? 'Deleting…' : 'Delete'}
-                  </button>
+              {item.tags?.length ? (
+                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {item.tags.map((t) => (
+                    <span
+                      key={t}
+                      style={{
+                        fontSize: 12,
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        background: '#f2f2f2',
+                        color: '#333',
+                        border: '1px solid #e6e6e6',
+                      }}
+                    >
+                      {t}
+                    </span>
+                  ))}
                 </div>
+              ) : null}
 
-                <div style={{ marginTop: 16, fontSize: 12, color: '#666' }}>
-                  <div>
-                    <strong>heirloomId:</strong> <code>{item.heirloomId}</code>
-                  </div>
-                  {item.photoKey ? (
-                    <div style={{ marginTop: 6 }}>
-                      <strong>photoKey:</strong> <code>{item.photoKey}</code>
-                    </div>
-                  ) : null}
-                </div>
+              <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
+                <button
+                  onClick={load}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    border: '1px solid #111',
+                    background: '#111',
+                    color: '#fff',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Refresh
+                </button>
+
+                <button
+                  onClick={onDelete}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    border: '1px solid #c33',
+                    background: '#fff',
+                    color: '#c33',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+
+              <div style={{ marginTop: 12, fontSize: 12, color: '#777' }}>
+                Heirloom ID: <code>{item.heirloomId}</code>
               </div>
             </div>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
