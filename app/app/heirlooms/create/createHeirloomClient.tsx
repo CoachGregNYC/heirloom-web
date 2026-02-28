@@ -19,7 +19,8 @@ const SESSION_KEY = 'heirloom.create.photoKey';
 
 export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhotoKey: string }) {
   const router = useRouter();
-  const { familyId, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
+  const { me, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
+  const familyId = me?.familyId || '';
 
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -67,7 +68,7 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
       }
 
       if (!familyId) {
-        throw new Error('No familyId available yet. (User is not in memberships table.)');
+        throw new Error('Missing familyId from /me. Add membership row for this userSub.');
       }
 
       const body: CreateHeirloomBody = {

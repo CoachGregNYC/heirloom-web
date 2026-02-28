@@ -36,7 +36,8 @@ function formatDate(iso?: string): string {
 export default function HeirloomsPage() {
   const router = useRouter();
 
-  const { familyId, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
+  const { me, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
+  const familyId = me?.familyId || '';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -100,7 +101,8 @@ export default function HeirloomsPage() {
   // Load once /me is resolved and we have a familyId
   useEffect(() => {
     if (meLoading) return;
-    if (!familyId) return;
+    if (meError) throw new Error(meError);
+    if (!familyId) throw new Error('Missing familyId from /me (membership not found).');
     loadHeirlooms(familyId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meLoading, familyId]);
