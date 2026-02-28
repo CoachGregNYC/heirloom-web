@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
@@ -15,9 +15,33 @@ type CreateHeirloomBody = {
   tags?: string[];
 };
 
-const SESSION_KEY = 'heirloom.create.photoKey';
+const SESSION_KEY_PHOTO_KEY = 'heirloom.create.photoKey';
+const SESSION_KEY_PHOTO_URL = 'heirloom.create.photoUrl';
+const SESSION_KEY_FILENAME = 'heirloom.create.filename';
 
-export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhotoKey: string }) {
+function safeTrim(v?: string | null) {
+  return (v ?? '').trim();
+}
+
+function readQueryParam(name: string): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    return safeTrim(sp.get(name));
+  } catch {
+    return '';
+  }
+}
+
+export default function CreateHeirloomClient({
+  initialPhotoKey,
+  initialPhotoUrl,
+  initialFilename,
+}: {
+  initialPhotoKey: string;
+  initialPhotoUrl?: string;
+  initialFilename?: string;
+}) {
   const router = useRouter();
   const { me, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
   const familyId = me?.familyId || '';
@@ -27,33 +51,70 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
 
   // Form state
   const [photoKey, setPhotoKey] = useState<string>('');
+  const [photoUrl, setPhotoUrl] = useState<string>('');
+  const [filename, setFilename] = useState<string>('');
+
   const [title, setTitle] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [room, setRoom] = useState<string>('Living Room');
   const [holiday, setHoliday] = useState<string>('None');
   const [tags, setTags] = useState<string[]>(['Photo']);
 
-  const resolvedInitialPhotoKey = useMemo(() => (initialPhotoKey ?? '').trim(), [initialPhotoKey]);
+  const resolvedInitialPhotoKey = useMemo(() => safeTrim(initialPhotoKey), [initialPhotoKey]);
+  const resolvedInitialPhotoUrl = useMemo(() => safeTrim(initialPhotoUrl), [initialPhotoUrl]);
+  const resolvedInitialFilename = useMemo(() => safeTrim(initialFilename), [initialFilename]);
 
-  // Resolve photoKey from:
-  // 1) query param (initialPhotoKey)
-  // 2) sessionStorage fallback
+  // Resolve (robustly) from:
+  // 1) server-passed props (searchParams -> page.tsx)
+  // 2) browser URL (in case props are missing / route got weird)
+  // 3) sessionStorage fallback (in case query string is huge/truncated)
   useEffect(() => {
-    const fromQuery = resolvedInitialPhotoKey;
-    const fromSession = typeof window !== 'undefined' ? window.sessionStorage.getItem(SESSION_KEY) : '';
+    const fromPropsKey = resolvedInitialPhotoKey;
+    const fromUrlKey = readQueryParam('photoKey');
+    const fromSessionKey =
+      typeof window !== 'undefined' ? safeTrim(window.sessionStorage.getItem(SESSION_KEY_PHOTO_KEY)) : '';
 
-    const chosen = (fromQuery || fromSession || '').trim();
-    setPhotoKey(chosen);
+    const chosenKey = safeTrim(fromPropsKey || fromUrlKey || fromSessionKey);
+    setPhotoKey(chosenKey);
+
+    const fromPropsUrl = resolvedInitialPhotoUrl;
+    const fromUrlUrl = readQueryParam('photoUrl');
+    const fromSessionUrl =
+      typeof window !== 'undefined' ? safeTrim(window.sessionStorage.getItem(SESSION_KEY_PHOTO_URL)) : '';
+    const chosenUrl = safeTrim(fromPropsUrl || fromUrlUrl || fromSessionUrl);
+    setPhotoUrl(chosenUrl);
+
+    const fromPropsFilename = resolvedInitialFilename;
+    const fromUrlFilename = readQueryParam('filename');
+    const fromSessionFilename =
+      typeof window !== 'undefined' ? safeTrim(window.sessionStorage.getItem(SESSION_KEY_FILENAME)) : '';
+    const chosenFilename = safeTrim(fromPropsFilename || fromUrlFilename || fromSessionFilename);
+    setFilename(chosenFilename);
 
     // Persist for refresh safety
-    if (chosen && typeof window !== 'undefined') {
-      window.sessionStorage.setItem(SESSION_KEY, chosen);
+    if (typeof window !== 'undefined') {
+      if (chosenKey) window.sessionStorage.setItem(SESSION_KEY_PHOTO_KEY, chosenKey);
+      if (chosenUrl) window.sessionStorage.setItem(SESSION_KEY_PHOTO_URL, chosenUrl);
+      if (chosenFilename) window.sessionStorage.setItem(SESSION_KEY_FILENAME, chosenFilename);
     }
-  }, [resolvedInitialPhotoKey]);
+
+    // Auto-title if blank
+    if (!safeTrim(title) && chosenFilename) {
+      setTitle(chosenFilename);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedInitialPhotoKey, resolvedInitialPhotoUrl, resolvedInitialFilename]);
 
   function toggleTag(t: string) {
     setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   }
+
+  const clearDraft = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.sessionStorage.removeItem(SESSION_KEY_PHOTO_KEY);
+    window.sessionStorage.removeItem(SESSION_KEY_PHOTO_URL);
+    window.sessionStorage.removeItem(SESSION_KEY_FILENAME);
+  }, []);
 
   async function onSubmit() {
     setError('');
@@ -62,7 +123,7 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
     try {
       ensureAmplifyConfigured();
 
-      const pk = photoKey.trim();
+      const pk = safeTrim(photoKey);
       if (!pk) {
         throw new Error('Missing photoKey. Go back to Photos and select a photo again.');
       }
@@ -73,8 +134,8 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
 
       const body: CreateHeirloomBody = {
         photoKey: pk,
-        title: title.trim() || undefined,
-        description: description.trim() || undefined,
+        title: safeTrim(title) || undefined,
+        description: safeTrim(description) || undefined,
         room: room || undefined,
         holiday: holiday || undefined,
         tags: tags.length ? tags : undefined,
@@ -85,11 +146,7 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
         body: JSON.stringify(body),
       });
 
-      // Success: clear the draft photoKey so the next create doesn’t accidentally reuse it
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.removeItem(SESSION_KEY);
-      }
-
+      clearDraft();
       router.replace('/app/heirlooms');
     } catch (e: any) {
       setError(String(e?.message ?? e));
@@ -161,14 +218,46 @@ export default function CreateHeirloomClient({ initialPhotoKey }: { initialPhoto
       ) : null}
 
       <div style={{ marginTop: 14, padding: 14, border: '1px solid #ddd', borderRadius: 14 }}>
-        <div style={{ color: '#666', fontSize: 12, marginBottom: 8 }}>
-          Selected photoKey
-          <div style={{ marginTop: 6 }}>
-            <code>{photoKey ? photoKey : '(missing)'}</code>
-          </div>
-        </div>
-
         <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ fontSize: 12, color: '#333' }}>Selected photo</div>
+
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 420,
+                height: 220,
+                borderRadius: 12,
+                border: '1px solid #eee',
+                background: '#f6f6f6',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photoUrl} alt={safeTrim(title) || 'Selected photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <div style={{ color: '#777', fontSize: 12, padding: 12 }}>
+                  No preview URL available (but photoKey may still be set).
+                </div>
+              )}
+            </div>
+
+            <div style={{ color: '#666', fontSize: 12 }}>
+              <div>
+                <strong>photoKey:</strong> <code>{photoKey ? photoKey : '(missing)'}</code>
+              </div>
+              {filename ? (
+                <div style={{ marginTop: 4 }}>
+                  <strong>filename:</strong> <code>{filename}</code>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
           <label style={{ display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 12, color: '#333' }}>
               Title <span style={{ color: '#c00' }}>*</span>
