@@ -19,7 +19,8 @@ type PhotoItem = {
 export default function AppHome() {
   const router = useRouter();
 
-  const { familyId, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
+  const { me, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
+  const familyId = me?.familyId || '';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -76,7 +77,8 @@ export default function AppHome() {
   // Once /me resolves and we have a familyId, load photos
   useEffect(() => {
     if (meLoading) return;
-    if (!familyId) return; // show error UI below
+    if (meError) throw new Error(meError);
+    if (!familyId) throw new Error('Missing familyId from /me (membership not found).');
     loadPhotos(familyId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meLoading, familyId]);
