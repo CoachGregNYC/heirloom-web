@@ -1,16 +1,24 @@
-// app/app/heirlooms/create/page.tsx
 import { Suspense } from 'react';
 import CreateHeirloomClient from './createHeirloomClient';
 
-export default function CreateHeirloomPage({
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function CreateHeirloomPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<SearchParams>;
 }) {
-  const photoKeyRaw = searchParams?.photoKey;
+  const sp = (await searchParams) ?? {};
+
+  const photoKeyRaw = sp.photoKey;
   const photoKey = Array.isArray(photoKeyRaw) ? photoKeyRaw[0] : photoKeyRaw;
 
-  // Even though we avoid useSearchParams, wrapping in Suspense is still safe and future-proof.
+  const photoUrlRaw = sp.photoUrl;
+  const photoUrl = Array.isArray(photoUrlRaw) ? photoUrlRaw[0] : photoUrlRaw;
+
+  const filenameRaw = sp.filename;
+  const filename = Array.isArray(filenameRaw) ? filenameRaw[0] : filenameRaw;
+
   return (
     <Suspense
       fallback={
@@ -20,7 +28,11 @@ export default function CreateHeirloomPage({
         </main>
       }
     >
-      <CreateHeirloomClient initialPhotoKey={photoKey ?? ''} />
+      <CreateHeirloomClient
+        initialPhotoKey={photoKey ?? ''}
+        initialPhotoUrl={photoUrl ?? ''}
+        initialFilename={filename ?? ''}
+      />
     </Suspense>
   );
 }
