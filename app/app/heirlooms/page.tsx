@@ -1,10 +1,12 @@
+// app/app/heirlooms/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
+import { useMe } from '@/app/useMe';
 
 type HeirloomItem = {
   familyId: string;
@@ -34,27 +36,25 @@ function formatDate(iso?: string): string {
 export default function HeirloomsPage() {
   const router = useRouter();
 
-  const familyId = useMemo(() => process.env.NEXT_PUBLIC_FAMILY_ID || '', []);
+  const { familyId, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [items, setItems] = useState<HeirloomItem[]>([]);
   const [deletingId, setDeletingId] = useState<string>('');
 
-  async function loadHeirlooms() {
+  async function loadHeirlooms(fid: string) {
     setError('');
     setLoading(true);
 
     try {
       ensureAmplifyConfigured();
 
-      if (!familyId) {
-        throw new Error(
-          'Missing NEXT_PUBLIC_FAMILY_ID. Add it to .env.local and Amplify environment variables.'
-        );
+      if (!fid) {
+        throw new Error('No familyId available yet. (User is not in memberships table.)');
       }
 
-      const data = await apiFetch(`/families/${familyId}/heirlooms`, { method: 'GET' });
+      const data = await apiFetch(`/families/${fid}/heirlooms`, { method: 'GET' });
       const list: HeirloomItem[] = Array.isArray(data) ? data : data?.items ?? [];
       setItems(list);
     } catch (e: any) {
@@ -74,13 +74,12 @@ export default function HeirloomsPage() {
     try {
       ensureAmplifyConfigured();
 
-      // Assumes API route exists:
-      // DELETE /families/{familyId}/heirlooms/{heirloomId}
+      if (!familyId) throw new Error('No familyId available yet.');
+
       await apiFetch(`/families/${familyId}/heirlooms/${h.heirloomId}`, {
         method: 'DELETE',
       });
 
-      // Optimistic remove
       setItems((prev) => prev.filter((x) => x.heirloomId !== h.heirloomId));
     } catch (e: any) {
       setError(String(e?.message ?? e));
@@ -98,10 +97,15 @@ export default function HeirloomsPage() {
     }
   }
 
+  // Load once /me is resolved and we have a familyId
   useEffect(() => {
-    loadHeirlooms();
+    if (meLoading) return;
+    if (!familyId) return;
+    loadHeirlooms(familyId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [meLoading, familyId]);
+
+  const effectiveError = meError || error;
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui' }}>
@@ -138,17 +142,44 @@ export default function HeirloomsPage() {
 
       <p style={{ marginTop: 8, color: '#444' }}>Family Filing Cabinet · Heirlooms</p>
 
-      {error ? (
+      {effectiveError ? (
         <div style={{ marginTop: 12, padding: 12, border: '1px solid #f99', borderRadius: 12 }}>
           <strong>Error:</strong>
-          <div style={{ whiteSpace: 'pre-wrap' }}>{error}</div>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{effectiveError}</div>
+
+          {meError ? (
+            <div style={{ marginTop: 10 }}>
+              <button
+                onClick={refreshMe}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid #111',
+                  background: '#111',
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                Retry /me
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!meLoading && !familyId ? (
+        <div style={{ marginTop: 12, padding: 12, border: '1px solid #f99', borderRadius: 12 }}>
+          <strong>Error:</strong>
+          <div style={{ whiteSpace: 'pre-wrap' }}>
+            No familyId returned from /me. This user is not in the memberships table yet.
+          </div>
         </div>
       ) : null}
 
       <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
         <button
-          onClick={loadHeirlooms}
-          disabled={loading}
+          onClick={() => familyId && loadHeirlooms(familyId)}
+          disabled={loading || meLoading || !familyId}
           style={{
             padding: '10px 14px',
             borderRadius: 10,
@@ -156,10 +187,10 @@ export default function HeirloomsPage() {
             background: '#111',
             color: '#fff',
             cursor: 'pointer',
-            opacity: loading ? 0.6 : 1,
+            opacity: loading || meLoading || !familyId ? 0.6 : 1,
           }}
         >
-          {loading ? 'Loading…' : 'Refresh'}
+          {meLoading ? 'Loading…' : loading ? 'Loading…' : 'Refresh'}
         </button>
 
         <div style={{ color: '#666', fontSize: 14 }}>
@@ -219,7 +250,6 @@ export default function HeirloomsPage() {
                   <span style={{ color: '#888', fontSize: 12 }}>No preview</span>
                 )}
 
-                {/* Admin delete button (does NOT navigate) */}
                 <button
                   type="button"
                   onClick={(e) => {

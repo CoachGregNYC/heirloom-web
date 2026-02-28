@@ -1,12 +1,12 @@
 // app/app/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
-import { getFamilyId } from '@/app/family';
+import { useMe } from '@/app/useMe';
 
 type PhotoItem = {
   key: string;
@@ -19,22 +19,20 @@ type PhotoItem = {
 export default function AppHome() {
   const router = useRouter();
 
-  const familyId = useMemo(() => {
-    return getFamilyId();
-  }, []);
+  const { familyId, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [selected, setSelected] = useState<PhotoItem | null>(null);
 
-  async function loadPhotos() {
+  async function loadPhotos(fid: string) {
     setError('');
     setLoading(true);
     try {
       ensureAmplifyConfigured();
 
-      const data = await apiFetch(`/families/${familyId}/photos`, { method: 'GET' });
+      const data = await apiFetch(`/families/${fid}/photos`, { method: 'GET' });
       const items: PhotoItem[] = Array.isArray(data) ? data : data?.items ?? [];
       setPhotos(items);
     } catch (e: any) {
@@ -45,24 +43,26 @@ export default function AppHome() {
   }
 
   async function onCreateHeirloom() {
-  if (!selected) return;
+    if (!selected) return;
 
-  const filename = selected.filename ?? selected.key.split('/').pop() ?? '';
-  const photoUrl = selected.url ?? '';
+    const filename = selected.filename ?? selected.key.split('/').pop() ?? '';
+    const photoUrl = selected.url ?? '';
 
-  if (typeof window !== 'undefined') {
-    // Write first
-    window.sessionStorage.setItem('heirloom_selected_photoKey', selected.key);
-    window.sessionStorage.setItem('heirloom_selected_photoUrl', photoUrl);
-    window.sessionStorage.setItem('heirloom_selected_filename', filename);
+    // Persist so Create page can recover even if query params are lost
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('heirloom_selected_photoKey', selected.key);
+      window.sessionStorage.setItem('heirloom_selected_photoUrl', photoUrl);
+      window.sessionStorage.setItem('heirloom_selected_filename', filename);
+    }
 
-    // IMPORTANT: force flush before navigation
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const qs = new URLSearchParams({
+      photoKey: selected.key,
+      photoUrl,
+      filename,
+    });
+
+    router.push(`/app/heirlooms/create?${qs.toString()}`);
   }
-
-  // Remove query params entirely (we don't need them anymore)
-  router.push('/app/heirlooms/create');
-}
 
   async function onSignOut() {
     try {
@@ -73,10 +73,15 @@ export default function AppHome() {
     }
   }
 
+  // Once /me resolves and we have a familyId, load photos
   useEffect(() => {
-    loadPhotos();
+    if (meLoading) return;
+    if (!familyId) return; // show error UI below
+    loadPhotos(familyId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [meLoading, familyId]);
+
+  const effectiveError = meError || error;
 
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui' }}>
@@ -113,17 +118,44 @@ export default function AppHome() {
 
       <p style={{ marginTop: 8, color: '#444' }}>Family Filing Cabinet</p>
 
-      {error ? (
+      {effectiveError ? (
         <div style={{ marginTop: 12, padding: 12, border: '1px solid #f99', borderRadius: 12 }}>
           <strong>Error:</strong>
-          <div style={{ whiteSpace: 'pre-wrap' }}>{error}</div>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{effectiveError}</div>
+
+          {meError ? (
+            <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
+              <button
+                onClick={refreshMe}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid #111',
+                  background: '#111',
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                Retry /me
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!meLoading && !familyId ? (
+        <div style={{ marginTop: 12, padding: 12, border: '1px solid #f99', borderRadius: 12 }}>
+          <strong>Error:</strong>
+          <div style={{ whiteSpace: 'pre-wrap' }}>
+            No familyId returned from /me. This user is not in the memberships table yet.
+          </div>
         </div>
       ) : null}
 
       <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <button
-          onClick={loadPhotos}
-          disabled={loading}
+          onClick={() => familyId && loadPhotos(familyId)}
+          disabled={loading || meLoading || !familyId}
           style={{
             padding: '10px 14px',
             borderRadius: 10,
@@ -131,10 +163,10 @@ export default function AppHome() {
             background: '#111',
             color: '#fff',
             cursor: 'pointer',
-            opacity: loading ? 0.6 : 1,
+            opacity: loading || meLoading || !familyId ? 0.6 : 1,
           }}
         >
-          {loading ? 'Loading…' : 'Refresh'}
+          {meLoading ? 'Loading…' : loading ? 'Loading…' : 'Refresh'}
         </button>
 
         <button
@@ -196,11 +228,8 @@ export default function AppHome() {
                 }}
               >
                 {thumb ? (
-                  <img
-                    src={thumb}
-                    alt={label}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={thumb} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <span style={{ color: '#888', fontSize: 12 }}>No preview</span>
                 )}
@@ -212,7 +241,7 @@ export default function AppHome() {
         })}
       </div>
 
-      {!loading && photos.length === 0 ? (
+      {!meLoading && !loading && photos.length === 0 ? (
         <div style={{ marginTop: 18, color: '#666' }}>No photos found.</div>
       ) : null}
     </main>
