@@ -1,10 +1,10 @@
-// app/app/useMe.ts
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
 
-export type MeResponse = {
+export type MeProfile = {
   userSub: string;
   familyId?: string;
   role?: string;
@@ -12,16 +12,17 @@ export type MeResponse = {
 };
 
 export function useMe() {
-  const [me, setMe] = useState<MeResponse | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [me, setMe] = useState<MeProfile | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
 
   const refresh = useCallback(async () => {
     setError('');
     setLoading(true);
     try {
+      ensureAmplifyConfigured();
       const data = await apiFetch('/me', { method: 'GET' });
-      setMe(data ?? null);
+      setMe(data as MeProfile);
     } catch (e: any) {
       setMe(null);
       setError(String(e?.message ?? e));
@@ -34,5 +35,5 @@ export function useMe() {
     refresh();
   }, [refresh]);
 
-  return { me, familyId: me?.familyId ?? '', role: me?.role ?? '', loading, error, refresh };
+  return { me, loading, error, refresh };
 }
