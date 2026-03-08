@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'aws-amplify/auth';
+import { signOut, fetchUserAttributes } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
 import { useMe } from '@/app/useMe';
@@ -26,6 +26,7 @@ export default function AppHome() {
   const [error, setError] = useState<string>('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [selected, setSelected] = useState<PhotoItem | null>(null);
+  const [userEmail, setUserEmail] = useState<string>('');
 
   async function loadPhotos(fid: string) {
     setError('');
@@ -74,6 +75,12 @@ export default function AppHome() {
     }
   }
 
+  useEffect(() => {
+    fetchUserAttributes().then(attrs => {
+      setUserEmail(attrs.email ?? '');
+    }).catch(() => {});
+  }, []);
+
   // Once /me resolves and we have a familyId, load photos
   useEffect(() => {
     if (meLoading) return;
@@ -116,9 +123,12 @@ export default function AppHome() {
         >
           Sign out
         </button>
+        {userEmail && (
+          <span style={{ fontSize: 13, color: '#666' }}>{userEmail}</span>
+        )}
       </div>
 
-      <p style={{ marginTop: 8, color: '#444' }}>Family Filing Cabinet</p>
+      <p style={{ marginTop: 8, color: '#444' }}>{userEmail ? `${userEmail} · ` : ''}Family Filing Cabinet</p>
 
       {effectiveError ? (
         <div style={{ marginTop: 12, padding: 12, border: '1px solid #f99', borderRadius: 12 }}>
