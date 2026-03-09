@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signOut, getCurrentUser } from 'aws-amplify/auth';
+import { signOut, fetchAuthSession } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
 import { useMe } from '@/app/useMe';
