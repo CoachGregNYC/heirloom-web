@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signOut, fetchUserAttributes } from 'aws-amplify/auth';
+import { signOut, getCurrentUser } from 'aws-amplify/auth';
 import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
 import { useMe } from '@/app/useMe';
@@ -76,8 +76,8 @@ export default function AppHome() {
   }
 
   useEffect(() => {
-    ensureAmplifyConfigured(); fetchUserAttributes().then(attrs => {
-      setUserEmail(attrs.email ?? '');
+    ensureAmplifyConfigured(); getCurrentUser().then(user => {
+      setUserEmail(user.signInDetails?.loginId ?? '');
     }).catch(() => {});
   }, []);
 
