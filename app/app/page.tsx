@@ -76,8 +76,10 @@ export default function AppHome() {
   }
 
   useEffect(() => {
-    ensureAmplifyConfigured(); getCurrentUser().then(user => {
-      setUserEmail(user.signInDetails?.loginId ?? ''); console.log("getCurrentUser result:", JSON.stringify(user)); console.log("getCurrentUser result:", JSON.stringify(user));
+    ensureAmplifyConfigured();
+    fetchAuthSession().then(session => {
+      const email = session.tokens?.idToken?.payload?.email as string ?? '';
+      setUserEmail(email);
     }).catch(() => {});
   }, []);
 
