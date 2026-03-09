@@ -76,7 +76,7 @@ export default function AppHome() {
   }
 
   useEffect(() => {
-    fetchUserAttributes().then(attrs => {
+    ensureAmplifyConfigured(); fetchUserAttributes().then(attrs => {
       setUserEmail(attrs.email ?? '');
     }).catch(() => {});
   }, []);
