@@ -214,7 +214,7 @@ export default function AppHome() {
           gap: 12,
         }}
       >
-        {photos.map((p) => {
+        {photos.filter(p => !p.assigned).map((p) => {
           const isSelected = selected.some(x => x.key === p.key);
           const thumb = p.url;
           const label = p.filename ?? p.key.split('/').pop() ?? p.key;
