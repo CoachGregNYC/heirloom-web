@@ -8,6 +8,7 @@ import { useMe } from '@/app/useMe';
 
 type CreateHeirloomBody = {
   photoKey: string;
+  photoKeys: string[];
   title?: string;
   description?: string;
   room?: string;
@@ -51,6 +52,8 @@ export default function CreateHeirloomClient({
 
   // Form state
   const [photoKey, setPhotoKey] = useState<string>('');
+  const [photoKeys, setPhotoKeys] = useState<string[]>([]);
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string>('');
   const [filename, setFilename] = useState<string>('');
 
@@ -90,6 +93,15 @@ export default function CreateHeirloomClient({
       typeof window !== 'undefined' ? safeTrim(window.sessionStorage.getItem(SESSION_KEY_FILENAME)) : '';
     const chosenFilename = safeTrim(fromPropsFilename || fromUrlFilename || fromSessionFilename);
     setFilename(chosenFilename);
+
+    // Load multi-photo selections
+    if (typeof window !== 'undefined') {
+      try {
+        const keys = JSON.parse(window.sessionStorage.getItem('heirloom_selected_photoKeys') || '[]');
+        const urls = JSON.parse(window.sessionStorage.getItem('heirloom_selected_photoUrls') || '[]');
+        if (keys.length) { setPhotoKeys(keys); setPhotoUrls(urls); }
+      } catch {}
+    }
 
     // Persist for refresh safety
     if (typeof window !== 'undefined') {
@@ -134,6 +146,7 @@ export default function CreateHeirloomClient({
 
       const body: CreateHeirloomBody = {
         photoKey: pk,
+        photoKeys: photoKeys.length ? photoKeys : [pk],
         title: safeTrim(title) || undefined,
         description: safeTrim(description) || undefined,
         room: room || undefined,
@@ -222,29 +235,24 @@ export default function CreateHeirloomClient({
           <div style={{ display: 'grid', gap: 8 }}>
             <div style={{ fontSize: 12, color: '#333' }}>Selected photo</div>
 
-            <div
-              style={{
-                width: '100%',
-                maxWidth: 420,
-                height: 220,
-                borderRadius: 12,
-                border: '1px solid #eee',
-                background: '#f6f6f6',
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={photoUrl} alt={safeTrim(title) || 'Selected photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <div style={{ color: '#777', fontSize: 12, padding: 12 }}>
-                  No preview URL available (but photoKey may still be set).
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {(photoUrls.length ? photoUrls : [photoUrl]).filter(Boolean).map((url, i) => (
+                <div key={i} style={{
+                  width: 140, height: 140, borderRadius: 10,
+                  border: '1px solid #eee', background: '#f6f6f6',
+                  overflow: 'hidden', flexShrink: 0,
+                }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt={`Photo ${i+1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
+              ))}
+              {!photoUrl && !photoUrls.length && (
+                <div style={{ color: '#777', fontSize: 12, padding: 12 }}>No preview available.</div>
               )}
             </div>
+            {photoKeys.length > 1 && (
+              <div style={{ fontSize: 12, color: '#666' }}>{photoKeys.length} photos selected</div>
+            )}
 
             <div style={{ color: '#666', fontSize: 12 }}>
               <div>

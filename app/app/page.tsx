@@ -25,7 +25,7 @@ export default function AppHome() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
-  const [selected, setSelected] = useState<PhotoItem | null>(null);
+  const [selected, setSelected] = useState<PhotoItem[]>([]);
   const [userEmail, setUserEmail] = useState<string>('');
 
   async function loadPhotos(fid: string) {
@@ -45,20 +45,22 @@ export default function AppHome() {
   }
 
   async function onCreateHeirloom() {
-    if (!selected) return;
+    if (!selected.length) return;
 
-    const filename = selected.filename ?? selected.key.split('/').pop() ?? '';
-    const photoUrl = selected.url ?? '';
+    const primary = selected[0];
+    const filename = primary.filename ?? primary.key.split('/').pop() ?? '';
+    const photoUrl = primary.url ?? '';
 
-    // Persist so Create page can recover even if query params are lost
     if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem('heirloom_selected_photoKey', selected.key);
+      window.sessionStorage.setItem('heirloom_selected_photoKey', primary.key);
       window.sessionStorage.setItem('heirloom_selected_photoUrl', photoUrl);
       window.sessionStorage.setItem('heirloom_selected_filename', filename);
+      window.sessionStorage.setItem('heirloom_selected_photoKeys', JSON.stringify(selected.map(p => p.key)));
+      window.sessionStorage.setItem('heirloom_selected_photoUrls', JSON.stringify(selected.map(p => p.url ?? '')));
     }
 
     const qs = new URLSearchParams({
-      photoKey: selected.key,
+      photoKey: primary.key,
       photoUrl,
       filename,
     });
@@ -185,21 +187,21 @@ export default function AppHome() {
 
         <button
           onClick={onCreateHeirloom}
-          disabled={!selected}
+          disabled={!selected.length}
           style={{
             padding: '10px 14px',
             borderRadius: 10,
             border: '1px solid #0a7',
-            background: selected ? '#0a7' : '#ddd',
-            color: selected ? '#fff' : '#666',
-            cursor: selected ? 'pointer' : 'not-allowed',
+            background: selected.length ? '#0a7' : '#ddd',
+            color: selected.length ? '#fff' : '#666',
+            cursor: selected.length ? 'pointer' : 'not-allowed',
           }}
         >
           Create Heirloom from Selected Photo
         </button>
 
         <div style={{ color: '#666', fontSize: 14 }}>
-          {selected ? `Selected: ${selected.filename ?? selected.key}` : 'No photo selected'}
+          {selected.length ? `Selected: ${selected.length} photo${selected.length > 1 ? 's' : ''}` : 'No photo selected'}
         </div>
       </div>
 
@@ -212,14 +214,14 @@ export default function AppHome() {
         }}
       >
         {photos.map((p) => {
-          const isSelected = selected?.key === p.key;
+          const isSelected = selected.some(x => x.key === p.key);
           const thumb = p.url;
           const label = p.filename ?? p.key.split('/').pop() ?? p.key;
 
           return (
             <button
               key={p.key}
-              onClick={() => setSelected(p)}
+              onClick={() => setSelected(prev => prev.find(x => x.key === p.key) ? prev.filter(x => x.key !== p.key) : [...prev, p])}
               style={{
                 textAlign: 'left',
                 borderRadius: 14,
