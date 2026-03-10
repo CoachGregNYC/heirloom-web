@@ -8,6 +8,7 @@ export type MeProfile = {
   userSub: string;
   familyId?: string;
   role?: string;
+  familyName?: string;
   createdAt?: string;
 };
 

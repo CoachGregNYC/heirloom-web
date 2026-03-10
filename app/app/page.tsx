@@ -130,7 +130,7 @@ export default function AppHome() {
         )}
       </div>
 
-      <p style={{ marginTop: 8, color: '#444' }}>{userEmail ? `${userEmail} · ` : ''}Family Filing Cabinet</p>
+      <p style={{ marginTop: 8, color: '#444' }}>{me?.familyName ? `${me.familyName} Family Filing Cabinet` : 'Family Filing Cabinet'}</p>
 
       {effectiveError ? (
         <div style={{ marginTop: 12, padding: 12, border: '1px solid #f99', borderRadius: 12 }}>
