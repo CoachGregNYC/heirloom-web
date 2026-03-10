@@ -14,6 +14,7 @@ type PhotoItem = {
   filename?: string;
   lastModified?: string;
   size?: number;
+  assigned?: boolean;
 };
 
 export default function AppHome() {
