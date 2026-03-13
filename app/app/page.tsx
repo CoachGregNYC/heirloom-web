@@ -98,7 +98,8 @@ export default function AppHome() {
   const effectiveError = meError || error;
 
   return (
-    <main style={{ padding: 24, fontFamily: 'system-ui' }}>
+    <main style={{ fontFamily: 'system-ui' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 100, background: '#fff', padding: '16px 24px', borderBottom: '1px solid #eee' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h1 style={{ margin: 0 }}>Heirloom</h1>
 
@@ -205,6 +206,8 @@ export default function AppHome() {
           {selected.length ? `Selected: ${selected.length} photo${selected.length > 1 ? 's' : ''}` : 'No photo selected'}
         </div>
       </div>
+      </div>
+      <div style={{ padding: '0 24px 24px' }}>
 
       <div
         style={{
@@ -261,6 +264,7 @@ export default function AppHome() {
       {!meLoading && !loading && photos.length === 0 ? (
         <div style={{ marginTop: 18, color: '#666' }}>No photos found.</div>
       ) : null}
+    </div>
     </main>
   );
 }
