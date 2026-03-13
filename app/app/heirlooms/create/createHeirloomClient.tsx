@@ -99,7 +99,7 @@ export default function CreateHeirloomClient({
       try {
         const keys = JSON.parse(window.sessionStorage.getItem('heirloom_selected_photoKeys') || '[]');
         const urls = JSON.parse(window.sessionStorage.getItem('heirloom_selected_photoUrls') || '[]');
-        if (keys.length) { setPhotoKeys(keys); setPhotoUrls(urls); }
+        console.log("loaded photoKeys:", keys, "photoUrls count:", urls.length); if (keys.length) { setPhotoKeys(keys); setPhotoUrls(urls); }
       } catch {}
     }
 
