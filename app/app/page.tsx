@@ -237,7 +237,7 @@ export default function AppHome() {
       >
         {photos.filter(p => !p.assigned).map((p) => {
           const isSelected = selected.some(x => x.key === p.key);
-          const isAdmin = me?.role === 'Admin' || me?.role === 'Owner'; console.log('role:', me?.role, 'isAdmin:', isAdmin);
+          const isAdmin = me?.role === 'Admin' || me?.role === 'Owner';
           const thumb = p.url;
           const label = p.filename ?? p.key.split('/').pop() ?? p.key;
 
