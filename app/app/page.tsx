@@ -205,7 +205,7 @@ export default function AppHome() {
           {meLoading ? 'Loading…' : loading ? 'Loading…' : 'Refresh'}
         </button>
 
-        <button
+        {(me?.role !== 'Viewer') && <button
           onClick={onCreateHeirloom}
           disabled={!selected.length}
           style={{
@@ -218,7 +218,7 @@ export default function AppHome() {
           }}
         >
           Create Heirloom from Selected Photo
-        </button>
+        </button>}
 
         <div style={{ color: '#666', fontSize: 14 }}>
           {selected.length ? `Selected: ${selected.length} photo${selected.length > 1 ? 's' : ''}` : 'No photo selected'}
