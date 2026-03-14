@@ -17,12 +17,44 @@ type PhotoItem = {
   assigned?: boolean;
 };
 
+const styles = `
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Lato:wght@300;400;700&display=swap');
+  .heirloom-root { font-family: 'Lato', sans-serif; background: #f8f6f1; min-height: 100vh; color: #1a1a2e; }
+  .heirloom-header { position: sticky; top: 0; z-index: 100; background: #1a2744; padding: 0 32px; border-bottom: 1px solid #2d3d6b; }
+  .heirloom-header-top { display: flex; align-items: center; gap: 16px; padding: 14px 0 10px; }
+  .heirloom-logo { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 600; color: #f0e6c8; margin: 0; letter-spacing: 0.5px; }
+  .heirloom-nav-btn { padding: 7px 16px; border-radius: 6px; border: 1px solid rgba(240,230,200,0.3); background: transparent; color: #c8d8f0; cursor: pointer; font-family: 'Lato', sans-serif; font-size: 13px; letter-spacing: 0.5px; transition: all 0.2s; }
+  .heirloom-nav-btn:hover { background: rgba(240,230,200,0.1); border-color: rgba(240,230,200,0.5); }
+  .heirloom-signout-btn { margin-left: auto; padding: 7px 16px; border-radius: 6px; border: 1px solid rgba(240,230,200,0.2); background: transparent; color: #a0b0c8; cursor: pointer; font-family: 'Lato', sans-serif; font-size: 13px; transition: all 0.2s; }
+  .heirloom-signout-btn:hover { background: rgba(255,255,255,0.05); color: #c8d8f0; }
+  .heirloom-email { font-size: 12px; color: #7a8fa8; letter-spacing: 0.3px; }
+  .heirloom-subtitle { font-family: 'Playfair Display', serif; font-size: 13px; color: #c8a96e; letter-spacing: 1.5px; text-transform: uppercase; padding-bottom: 12px; margin: 0; }
+  .heirloom-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 32px; background: #f8f6f1; border-bottom: 1px solid #e8e0d0; }
+  .heirloom-refresh-btn { padding: 9px 20px; border-radius: 6px; border: 1px solid #1a2744; background: #1a2744; color: #f0e6c8; cursor: pointer; font-family: 'Lato', sans-serif; font-size: 13px; letter-spacing: 0.5px; transition: all 0.2s; }
+  .heirloom-refresh-btn:hover { background: #2d3d6b; }
+  .heirloom-refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .heirloom-create-btn { padding: 9px 20px; border-radius: 6px; border: 1px solid #b8960c; background: #c8a96e; color: #1a1a2e; cursor: pointer; font-family: 'Lato', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; transition: all 0.2s; }
+  .heirloom-create-btn:hover:not(:disabled) { background: #b8960c; color: #fff; }
+  .heirloom-create-btn:disabled { background: #e0d8c8; border-color: #d0c8b8; color: #a09080; cursor: not-allowed; }
+  .heirloom-selection-text { font-size: 13px; color: #6a7a8a; font-style: italic; letter-spacing: 0.3px; }
+  .heirloom-grid-container { padding: 24px 32px 40px; }
+  .heirloom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; }
+  .heirloom-photo-card { text-align: left; border-radius: 8px; border: 2px solid transparent; background: #fff; padding: 8px; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 4px rgba(26,39,68,0.08); }
+  .heirloom-photo-card:hover { box-shadow: 0 4px 12px rgba(26,39,68,0.15); transform: translateY(-1px); }
+  .heirloom-photo-card.selected { border-color: #c8a96e; box-shadow: 0 0 0 3px rgba(200,169,110,0.2); }
+  .heirloom-photo-thumb { width: 100%; height: 130px; border-radius: 6px; background: #f0ebe0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .heirloom-photo-label { margin-top: 8px; font-size: 11px; color: #6a7a8a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.2px; }
+  .heirloom-delete-btn { margin-top: 6px; width: 100%; padding: 5px 0; border-radius: 4px; border: 1px solid #f0c8c8; background: #fff; color: #a03030; cursor: pointer; font-size: 11px; font-family: 'Lato', sans-serif; letter-spacing: 0.3px; transition: all 0.2s; }
+  .heirloom-delete-btn:hover:not(:disabled) { background: #fff0f0; border-color: #e09090; }
+  .heirloom-error { margin: 12px 32px; padding: 14px 18px; border: 1px solid #f0c8c8; border-radius: 8px; background: #fff8f8; color: #a03030; font-size: 14px; }
+  .heirloom-empty { margin-top: 40px; text-align: center; color: #9a8a7a; font-family: 'Playfair Display', serif; font-style: italic; font-size: 16px; }
+  .heirloom-divider { width: 40px; height: 1px; background: #c8a96e; margin: 8px auto 0; }
+`;
+
 export default function AppHome() {
   const router = useRouter();
-
   const { me, loading: meLoading, error: meError, refresh: refreshMe } = useMe();
   const familyId = me?.familyId || '';
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -35,7 +67,6 @@ export default function AppHome() {
     setLoading(true);
     try {
       ensureAmplifyConfigured();
-
       const data = await apiFetch(`/families/${fid}/photos`, { method: 'GET' });
       const items: PhotoItem[] = Array.isArray(data) ? data : data?.items ?? [];
       setPhotos(items);
@@ -65,11 +96,9 @@ export default function AppHome() {
 
   async function onCreateHeirloom() {
     if (!selected.length) return;
-
     const primary = selected[0];
     const filename = primary.filename ?? primary.key.split('/').pop() ?? '';
     const photoUrl = primary.url ?? '';
-
     if (typeof window !== 'undefined') {
       window.sessionStorage.setItem('heirloom_selected_photoKey', primary.key);
       window.sessionStorage.setItem('heirloom_selected_photoUrl', photoUrl);
@@ -77,13 +106,7 @@ export default function AppHome() {
       window.sessionStorage.setItem('heirloom_selected_photoKeys', JSON.stringify(selected.map(p => p.key)));
       window.sessionStorage.setItem('heirloom_selected_photoUrls', JSON.stringify(selected.map(p => p.url ?? '')));
     }
-
-    const qs = new URLSearchParams({
-      photoKey: primary.key,
-      photoUrl,
-      filename,
-    });
-
+    const qs = new URLSearchParams({ photoKey: primary.key, photoUrl, filename });
     router.push(`/app/heirlooms/create?${qs.toString()}`);
   }
 
@@ -104,7 +127,6 @@ export default function AppHome() {
     }).catch(() => {});
   }, []);
 
-  // Once /me resolves and we have a familyId, load photos
   useEffect(() => {
     if (meLoading) return;
     if (meError) throw new Error(meError);
@@ -116,188 +138,87 @@ export default function AppHome() {
   const effectiveError = meError || error;
 
   return (
-    <main style={{ fontFamily: 'system-ui' }}>
-      <div style={{ position: 'sticky', top: 0, zIndex: 100, background: '#fff', padding: '16px 24px', borderBottom: '1px solid #eee' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <h1 style={{ margin: 0 }}>Heirloom</h1>
-
-        <button
-          onClick={() => router.push('/app/heirlooms')}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 10,
-            border: '1px solid #999',
-            background: '#fff',
-            cursor: 'pointer',
-          }}
-        >
-          Heirlooms →
-        </button>
-
-        <button
-          onClick={onSignOut}
-          style={{
-            marginLeft: 'auto',
-            padding: '8px 12px',
-            borderRadius: 10,
-            border: '1px solid #999',
-            background: '#fff',
-            cursor: 'pointer',
-          }}
-        >
-          Sign out
-        </button>
-        {userEmail && (
-          <span style={{ fontSize: 13, color: '#666' }}>{userEmail}</span>
-        )}
-      </div>
-
-      <p style={{ marginTop: 8, color: '#444' }}>{me?.familyName ? `${me.familyName} Family Filing Cabinet` : 'Family Filing Cabinet'}</p>
-
-      {effectiveError ? (
-        <div style={{ marginTop: 12, padding: 12, border: '1px solid #f99', borderRadius: 12 }}>
-          <strong>Error:</strong>
-          <div style={{ whiteSpace: 'pre-wrap' }}>{effectiveError}</div>
-
-          {meError ? (
-            <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
-              <button
-                onClick={refreshMe}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 10,
-                  border: '1px solid #111',
-                  background: '#111',
-                  color: '#fff',
-                  cursor: 'pointer',
-                }}
-              >
-                Retry /me
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {!meLoading && !familyId ? (
-        <div style={{ marginTop: 12, padding: 12, border: '1px solid #f99', borderRadius: 12 }}>
-          <strong>Error:</strong>
-          <div style={{ whiteSpace: 'pre-wrap' }}>
-            No familyId returned from /me. This user is not in the memberships table yet.
-          </div>
-        </div>
-      ) : null}
-
-      <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button
-          onClick={() => familyId && loadPhotos(familyId)}
-          disabled={loading || meLoading || !familyId}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 10,
-            border: '1px solid #111',
-            background: '#111',
-            color: '#fff',
-            cursor: 'pointer',
-            opacity: loading || meLoading || !familyId ? 0.6 : 1,
-          }}
-        >
-          {meLoading ? 'Loading…' : loading ? 'Loading…' : 'Refresh'}
-        </button>
-
-        {(me?.role !== 'Viewer') && <button
-          onClick={onCreateHeirloom}
-          disabled={!selected.length}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 10,
-            border: '1px solid #0a7',
-            background: selected.length ? '#0a7' : '#ddd',
-            color: selected.length ? '#fff' : '#666',
-            cursor: selected.length ? 'pointer' : 'not-allowed',
-          }}
-        >
-          Create Heirloom from Selected Photo
-        </button>}
-
-        <div style={{ color: '#666', fontSize: 14 }}>
-          {selected.length ? `Selected: ${selected.length} photo${selected.length > 1 ? 's' : ''}` : 'No photo selected'}
-        </div>
-      </div>
-      </div>
-      <div style={{ padding: '0 24px 24px' }}>
-
-      <div
-        style={{
-          marginTop: 16,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-          gap: 12,
-        }}
-      >
-        {photos.filter(p => !p.assigned).map((p) => {
-          const isSelected = selected.some(x => x.key === p.key);
-          const isAdmin = me?.role === 'Admin' || me?.role === 'Owner';
-          const thumb = p.url;
-          const label = p.filename ?? p.key.split('/').pop() ?? p.key;
-
-          return (
-            <button
-              key={p.key}
-              onClick={() => setSelected(prev => prev.find(x => x.key === p.key) ? prev.filter(x => x.key !== p.key) : [...prev, p])}
-              style={{
-                textAlign: 'left',
-                borderRadius: 14,
-                border: isSelected ? '2px solid #0a7' : '1px solid #ddd',
-                background: '#fff',
-                padding: 10,
-                cursor: 'pointer',
-              }}
-            >
-              <div
-                style={{
-                  width: '100%',
-                  height: 120,
-                  borderRadius: 10,
-                  background: '#f3f3f3',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                }}
-              >
-                {thumb ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={thumb} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <span style={{ color: '#888', fontSize: 12 }}>No preview</span>
-                )}
-              </div>
-              {isAdmin && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDeletePhoto(p); }}
-                  disabled={deletingPhoto === p.key}
-                  style={{
-                    marginTop: 6, width: '100%',
-                    padding: '4px 0', borderRadius: 6,
-                    border: '1px solid #f99', background: '#fff',
-                    color: '#c00', cursor: 'pointer', fontSize: 11,
-                  }}
-                >
-                  {deletingPhoto === p.key ? 'Deleting…' : 'Delete Photo'}
-                </button>
-              )}
-
-              <div style={{ marginTop: 8, fontSize: 12, color: '#333' }}>{label}</div>
+    <>
+      <style>{styles}</style>
+      <main className="heirloom-root">
+        <header className="heirloom-header">
+          <div className="heirloom-header-top">
+            <h1 className="heirloom-logo">Heirloom</h1>
+            <button className="heirloom-nav-btn" onClick={() => router.push('/app/heirlooms')}>
+              Heirlooms →
             </button>
-          );
-        })}
-      </div>
+            <button className="heirloom-signout-btn" onClick={onSignOut}>Sign out</button>
+            {userEmail && <span className="heirloom-email">{userEmail}</span>}
+          </div>
+          <p className="heirloom-subtitle">
+            {me?.familyName ? `${me.familyName} Family · Filing Cabinet` : 'Family Filing Cabinet'}
+          </p>
+        </header>
 
-      {!meLoading && !loading && photos.length === 0 ? (
-        <div style={{ marginTop: 18, color: '#666' }}>No photos found.</div>
-      ) : null}
-    </div>
-    </main>
+        {effectiveError ? (
+          <div className="heirloom-error">
+            <strong>Error:</strong> {effectiveError}
+            {meError && (
+              <button onClick={refreshMe} style={{ marginLeft: 12, padding: '4px 12px', borderRadius: 4, border: '1px solid #a03030', background: 'transparent', color: '#a03030', cursor: 'pointer', fontSize: 12 }}>
+                Retry
+              </button>
+            )}
+          </div>
+        ) : null}
+
+        <div className="heirloom-toolbar">
+          <button className="heirloom-refresh-btn" onClick={() => familyId && loadPhotos(familyId)} disabled={loading || meLoading || !familyId}>
+            {loading || meLoading ? 'Loading…' : 'Refresh'}
+          </button>
+          {me?.role !== 'Viewer' && (
+            <button className="heirloom-create-btn" onClick={onCreateHeirloom} disabled={!selected.length}>
+              Create Heirloom from Selected
+            </button>
+          )}
+          <span className="heirloom-selection-text">
+            {selected.length ? `${selected.length} photo${selected.length > 1 ? 's' : ''} selected` : 'Tap photos to select'}
+          </span>
+        </div>
+
+        <div className="heirloom-grid-container">
+          <div className="heirloom-grid">
+            {photos.filter(p => !p.assigned).map((p) => {
+              const isSelected = selected.some(x => x.key === p.key);
+              const isAdmin = me?.role === 'Admin' || me?.role === 'Owner';
+              const thumb = p.url;
+              const label = p.filename ?? p.key.split('/').pop() ?? p.key;
+              return (
+                <button
+                  key={p.key}
+                  className={`heirloom-photo-card${isSelected ? ' selected' : ''}`}
+                  onClick={() => setSelected(prev => prev.find(x => x.key === p.key) ? prev.filter(x => x.key !== p.key) : [...prev, p])}
+                >
+                  <div className="heirloom-photo-thumb">
+                    {thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={thumb} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ color: '#a09080', fontSize: 12, fontStyle: 'italic' }}>No preview</span>
+                    )}
+                  </div>
+                  {isAdmin && (
+                    <button className="heirloom-delete-btn" onClick={(e) => { e.stopPropagation(); onDeletePhoto(p); }} disabled={deletingPhoto === p.key}>
+                      {deletingPhoto === p.key ? 'Deleting…' : 'Delete'}
+                    </button>
+                  )}
+                  <div className="heirloom-photo-label">{label}</div>
+                </button>
+              );
+            })}
+          </div>
+          {!meLoading && !loading && photos.filter(p => !p.assigned).length === 0 && (
+            <div className="heirloom-empty">
+              <p>No photos in the filing cabinet yet.</p>
+              <div className="heirloom-divider" />
+            </div>
+          )}
+        </div>
+      </main>
+    </>
   );
 }
