@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ensureAmplifyConfigured } from '@/app/amplifyClient';
 import { apiFetch } from '@/app/apiClient';
@@ -62,6 +62,7 @@ export default function CreateHeirloomClient({
   const [room, setRoom] = useState<string>('Living Room');
   const [holiday, setHoliday] = useState<string>('None');
   const [tags, setTags] = useState<string[]>(['Photo']);
+  const isDirty = useRef(false);
 
   const resolvedInitialPhotoKey = useMemo(() => safeTrim(initialPhotoKey), [initialPhotoKey]);
   const resolvedInitialPhotoUrl = useMemo(() => safeTrim(initialPhotoUrl), [initialPhotoUrl]);
@@ -117,6 +118,18 @@ export default function CreateHeirloomClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedInitialPhotoKey, resolvedInitialPhotoUrl, resolvedInitialFilename]);
 
+  // Warn before navigating away with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty.current) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   function toggleTag(t: string) {
     setTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   }
@@ -159,6 +172,7 @@ export default function CreateHeirloomClient({
         body: JSON.stringify(body),
       });
 
+      isDirty.current = false;
       clearDraft();
       router.replace('/app/heirlooms');
     } catch (e: any) {
@@ -176,7 +190,7 @@ export default function CreateHeirloomClient({
         <h1 style={{ margin: 0 }}>Heirloom</h1>
 
         <button
-          onClick={() => router.push('/app')}
+          onClick={() => { if (isDirty.current && !window.confirm('You have unsaved changes. Leave without saving?')) return; router.push('/app'); }}
           style={{
             marginLeft: 'auto',
             padding: '8px 12px',
@@ -190,7 +204,7 @@ export default function CreateHeirloomClient({
         </button>
 
         <button
-          onClick={() => router.push('/app/heirlooms')}
+          onClick={() => { if (isDirty.current && !window.confirm('You have unsaved changes. Leave without saving?')) return; router.push('/app/heirlooms'); }}
           style={{
             padding: '8px 12px',
             borderRadius: 10,
@@ -272,7 +286,7 @@ export default function CreateHeirloomClient({
             </div>
             <input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); isDirty.current = true; }}
               placeholder="e.g., Dad’s Navy Photo"
               style={{
                 padding: '10px 12px',
@@ -287,7 +301,7 @@ export default function CreateHeirloomClient({
             <div style={{ fontSize: 12, color: '#333' }}>Description</div>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => { setDescription(e.target.value); isDirty.current = true; }}
               placeholder="Add the story behind this..."
               rows={4}
               style={{
@@ -383,7 +397,7 @@ export default function CreateHeirloomClient({
 
             <button
               type="button"
-              onClick={() => router.back()}
+              onClick={() => { if (isDirty.current && !window.confirm('You have unsaved changes. Leave without saving?')) return; router.back(); }}
               style={{
                 padding: '10px 14px',
                 borderRadius: 10,
