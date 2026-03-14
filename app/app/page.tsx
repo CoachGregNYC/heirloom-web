@@ -63,23 +63,6 @@ export default function AppHome() {
     }
   }
 
-  async function onDeletePhoto(p: PhotoItem) {
-    const ok = window.confirm(`Delete photo "${p.filename ?? p.key}"? This cannot be undone.`);
-    if (!ok) return;
-    setDeletingPhoto(p.key);
-    try {
-      ensureAmplifyConfigured();
-      const encodedKey = encodeURIComponent(p.key);
-      await apiFetch(`/families/${familyId}/photos/${encodedKey}`, { method: 'DELETE' });
-      setPhotos(prev => prev.filter(x => x.key !== p.key));
-      setSelected(prev => prev.filter(x => x.key !== p.key));
-    } catch (e: any) {
-      setError(String(e?.message ?? e));
-    } finally {
-      setDeletingPhoto('');
-    }
-  }
-
   async function onCreateHeirloom() {
     if (!selected.length) return;
 
