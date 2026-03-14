@@ -63,6 +63,23 @@ export default function AppHome() {
     }
   }
 
+  async function onDeletePhoto(p: PhotoItem) {
+    const ok = window.confirm(`Delete photo "${p.filename ?? p.key}"? This cannot be undone.`);
+    if (!ok) return;
+    setDeletingPhoto(p.key);
+    try {
+      ensureAmplifyConfigured();
+      const encodedKey = encodeURIComponent(p.key);
+      await apiFetch(`/families/${familyId}/photos/${encodedKey}`, { method: 'DELETE' });
+      setPhotos(prev => prev.filter(x => x.key !== p.key));
+      setSelected(prev => prev.filter(x => x.key !== p.key));
+    } catch (e: any) {
+      setError(String(e?.message ?? e));
+    } finally {
+      setDeletingPhoto('');
+    }
+  }
+
   async function onCreateHeirloom() {
     if (!selected.length) return;
 
@@ -273,6 +290,20 @@ export default function AppHome() {
                   <span style={{ color: '#888', fontSize: 12 }}>No preview</span>
                 )}
               </div>
+              {isAdmin && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDeletePhoto(p); }}
+                  disabled={deletingPhoto === p.key}
+                  style={{
+                    marginTop: 6, width: '100%',
+                    padding: '4px 0', borderRadius: 6,
+                    border: '1px solid #f99', background: '#fff',
+                    color: '#c00', cursor: 'pointer', fontSize: 11,
+                  }}
+                >
+                  {deletingPhoto === p.key ? 'Deleting…' : 'Delete Photo'}
+                </button>
+              )}
 
               <div style={{ marginTop: 8, fontSize: 12, color: '#333' }}>{label}</div>
             </button>
