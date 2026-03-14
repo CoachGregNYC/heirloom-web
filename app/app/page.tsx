@@ -28,6 +28,7 @@ export default function AppHome() {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [selected, setSelected] = useState<PhotoItem[]>([]);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [deletingPhoto, setDeletingPhoto] = useState<string>('');
 
   async function loadPhotos(fid: string) {
     setError('');
@@ -42,6 +43,23 @@ export default function AppHome() {
       setError(String(e?.message ?? e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onDeletePhoto(p: PhotoItem) {
+    const ok = window.confirm(`Delete photo "${p.filename ?? p.key}"? This cannot be undone.`);
+    if (!ok) return;
+    setDeletingPhoto(p.key);
+    try {
+      ensureAmplifyConfigured();
+      const encodedKey = encodeURIComponent(p.key);
+      await apiFetch(`/families/${familyId}/photos/${encodedKey}`, { method: 'DELETE' });
+      setPhotos(prev => prev.filter(x => x.key !== p.key));
+      setSelected(prev => prev.filter(x => x.key !== p.key));
+    } catch (e: any) {
+      setError(String(e?.message ?? e));
+    } finally {
+      setDeletingPhoto('');
     }
   }
 
@@ -219,6 +237,7 @@ export default function AppHome() {
       >
         {photos.filter(p => !p.assigned).map((p) => {
           const isSelected = selected.some(x => x.key === p.key);
+          const isAdmin = me?.role === 'Admin' || me?.role === 'Owner';
           const thumb = p.url;
           const label = p.filename ?? p.key.split('/').pop() ?? p.key;
 
