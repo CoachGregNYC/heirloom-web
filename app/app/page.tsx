@@ -53,7 +53,7 @@ export default function AppHome() {
     try {
       ensureAmplifyConfigured();
       const encodedKey = encodeURIComponent(p.key);
-      await apiFetch(`/families/${familyId}/photos/${encodedKey}`, { method: 'DELETE' });
+      await apiFetch(`/families/${familyId}/photos?photoKey=${encodedKey}`, { method: 'DELETE' });
       setPhotos(prev => prev.filter(x => x.key !== p.key));
       setSelected(prev => prev.filter(x => x.key !== p.key));
     } catch (e: any) {
